@@ -26,6 +26,7 @@ import {
   Utensils,
   User,
   Wallet,
+  Trash2,
   X
 } from "lucide-react";
 import { AuthProvider } from "./context/AuthContext";
@@ -92,7 +93,8 @@ function CashPilotApp() {
     addSplit,
     settleSplit: settleSplitAction,
     unsettleSplit: unsettleSplitAction,
-    deleteSplit
+    deleteSplit,
+    clearAllUserData
   } = useData();
   const [screen, setScreen] = useState("home");
   const [aiOpen, setAiOpen] = useState(true);
@@ -292,6 +294,7 @@ function CashPilotApp() {
               goals={goals}
               theme={theme}
               toggleTheme={toggleTheme}
+              onClearData={clearAllUserData}
             />
           )}
         </div>
@@ -1365,7 +1368,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
   );
 }
 
-function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLogout, transactions, accounts, goals, theme, toggleTheme }) {
+function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLogout, transactions, accounts, goals, theme, toggleTheme, onClearData }) {
   const [form, setForm] = useState({
     name: profile.name || "",
     allowance: String(settings.allowance || 0),
@@ -1373,6 +1376,9 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [confirmNameInput, setConfirmNameInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setForm({
@@ -1397,6 +1403,21 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
       setMessage(error.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteData = async () => {
+    if (confirmNameInput.trim() !== (profile.name || "CashPilot Student").trim()) return;
+    setDeleting(true);
+    try {
+      await onClearData();
+      setDeleteModalOpen(false);
+      setConfirmNameInput("");
+      setMessage("All account data has been successfully deleted.");
+    } catch (error) {
+      setMessage(`Failed to delete data: ${error.message}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1461,8 +1482,82 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
           <button className="outline-pill pressable" type="button" onClick={handleExportJSON}>Export backup (JSON)</button>
           <button className="outline-pill pressable" type="button" onClick={handleExportCSV}>Export expenses (CSV)</button>
         </div>
+        <div className="form-actions" style={{ marginTop: "16px", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
+          <button 
+            className="primary-button pressable" 
+            style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", color: "var(--danger)", marginTop: "0" }} 
+            type="button" 
+            onClick={() => setDeleteModalOpen(true)}
+          >
+            <Trash2 size={16} style={{ marginRight: "8px" }} />
+            Delete all account data
+          </button>
+        </div>
         {message && <p className="form-error success-message">{message}</p>}
       </form>
+
+      {deleteModalOpen && createPortal(
+        <div className="modal-backdrop" onClick={() => { setDeleteModalOpen(false); setConfirmNameInput(""); }}>
+          <div className="student-modal" onClick={(e) => e.stopPropagation()} style={{ border: "1px solid rgba(239, 68, 68, 0.2)", padding: "20px 24px" }}>
+            <div className="modal-header" style={{ marginBottom: "12px" }}>
+              <h3 style={{ color: "var(--danger)", display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "18px" }}>
+                <Trash2 size={20} /> Danger Zone: Delete Data
+              </h3>
+            </div>
+            
+            <div className="modal-body" style={{ margin: "16px 0 20px" }}>
+              <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: "1.5", marginBottom: "16px" }}>
+                This action is permanent and cannot be undone. All your transactions, budgets, accounts, goals, and splits will be permanently deleted.
+              </p>
+              
+              <label style={{ display: "block", marginBottom: "8px" }}>
+                <span style={{ display: "block", fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>
+                  To confirm, type your account name: <strong style={{ color: "var(--text)", background: "var(--surface)", padding: "2px 6px", borderRadius: "4px", fontSize: "13px", border: "1px solid var(--border)" }}>{profile.name || "CashPilot Student"}</strong>
+                </span>
+                <input 
+                  type="text" 
+                  value={confirmNameInput} 
+                  onChange={(e) => setConfirmNameInput(e.target.value)} 
+                  placeholder="Enter account name exactly" 
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text)", fontSize: "14px", boxSizing: "border-box" }}
+                />
+              </label>
+            </div>
+            
+            <div className="modal-actions" style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button 
+                className="outline-pill pressable" 
+                style={{ margin: 0, padding: "10px 16px", borderRadius: "8px", background: "var(--surface-raised)" }} 
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setConfirmNameInput("");
+                }}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button 
+                className="primary-button pressable" 
+                style={{ 
+                  margin: 0, 
+                  padding: "10px 16px", 
+                  borderRadius: "8px", 
+                  background: confirmNameInput.trim() === (profile.name || "CashPilot Student").trim() ? "var(--danger)" : "rgba(239, 68, 68, 0.4)", 
+                  borderColor: confirmNameInput.trim() === (profile.name || "CashPilot Student").trim() ? "var(--danger)" : "transparent",
+                  color: "#fff",
+                  cursor: confirmNameInput.trim() === (profile.name || "CashPilot Student").trim() ? "pointer" : "not-allowed" 
+                }} 
+                onClick={handleDeleteData}
+                disabled={confirmNameInput.trim() !== (profile.name || "CashPilot Student").trim() || deleting}
+              >
+                {deleting ? "Deleting..." : "Delete all data"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       <p className="credit-line settings-credit">Made with 💜 by Labhansh</p>
     </div>
   );

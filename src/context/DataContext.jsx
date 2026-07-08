@@ -126,7 +126,31 @@ export function DataProvider({ children }) {
       addSplit: (data) => withUser((userId) => addSplitDoc(userId, data)),
       settleSplit: (id) => withUser((userId) => settleSplitDoc(userId, id)),
       unsettleSplit: (id) => withUser((userId) => unsettleSplitDoc(userId, id)),
-      deleteSplit: (id) => withUser((userId) => deleteSplitDoc(userId, id))
+      deleteSplit: (id) => withUser((userId) => deleteSplitDoc(userId, id)),
+      clearAllUserData: () => withUser(async (userId) => {
+        for (const tx of transactions) {
+          await deleteTransactionDoc(userId, tx.id);
+        }
+        for (const acc of accounts) {
+          await deleteAccountDoc(userId, acc.id);
+        }
+        for (const g of goals) {
+          await deleteGoalDoc(userId, g.id);
+        }
+        for (const s of splits) {
+          await deleteSplitDoc(userId, s.id);
+        }
+        for (const r of recurring) {
+          await deleteRecurringDoc(userId, r.id);
+        }
+        await updateProfileDoc(userId, {
+          name: "CashPilot Student",
+          settings: {
+            allowance: 0,
+            savingsGoal: 0
+          }
+        });
+      })
     }),
     [accounts, goals, profile, summary, transactions, recurring, splits, loadingData, error, user]
   );
