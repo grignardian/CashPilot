@@ -210,6 +210,16 @@ function CashPilotApp() {
     );
   }
 
+  // New user: data loaded but budget never configured
+  if (!loadingData && settings.allowance === 0) {
+    return (
+      <OnboardingScreen
+        profile={profile}
+        updateSettings={updateSettings}
+      />
+    );
+  }
+
   return (
     <main className="stage">
       <section className="app-shell" aria-label="CashPilot budget planner">
@@ -383,6 +393,90 @@ function LoadingScreen() {
         <div style={{ marginTop: "24px", height: "4px", borderRadius: "99px", overflow: "hidden", background: "var(--border)" }}>
           <div style={{ height: "100%", width: "60%", borderRadius: "99px", background: "var(--accent-light)", animation: "shimmer 1.5s ease infinite", backgroundSize: "200% 100%", backgroundImage: "linear-gradient(90deg, var(--accent) 25%, var(--accent-light) 50%, var(--accent) 75%)" }} />
         </div>
+      </section>
+    </main>
+  );
+}
+
+function OnboardingScreen({ profile, updateSettings }) {
+  const [form, setForm] = useState({ allowance: "5000", savingsGoal: "1000" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const allowanceVal = Number(form.allowance.replace(/[^0-9]/g, "")) || 0;
+    const savingsVal = Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0;
+
+    if (allowanceVal <= 0) {
+      setError("Please set a monthly allowance greater than 0.");
+      setBusy(false);
+      return;
+    }
+    if (savingsVal > allowanceVal) {
+      setError("Savings goal cannot be higher than your monthly allowance.");
+      setBusy(false);
+      return;
+    }
+
+    try {
+      await updateSettings({
+        allowance: allowanceVal,
+        savingsGoal: savingsVal,
+      });
+    } catch (err) {
+      setError(err.message || "Failed to save settings. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const name = profile.name || "Student";
+
+  return (
+    <main className="stage auth-stage">
+      <section className="auth-card" style={{ maxWidth: "420px" }}>
+        <div className="brand-mark">
+          <Sparkles size={18} />
+          <span>CashPilot</span>
+        </div>
+        <h1 style={{ fontSize: "24px", marginTop: "12px" }}>Welcome, {name}!</h1>
+        <p className="auth-subtitle" style={{ marginBottom: "20px" }}>
+          Let's set up your monthly budget to unlock your smart daily spending limits.
+        </p>
+
+        <form className="auth-form" onSubmit={submit}>
+          <label>
+            <span>Monthly Budget (Allowance)</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={form.allowance}
+              onChange={(e) => setForm({ ...form, allowance: e.target.value.replace(/[^0-9]/g, "") })}
+              placeholder="e.g. 5000"
+              required
+            />
+          </label>
+          <label>
+            <span>Savings Target Goal</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={form.savingsGoal}
+              onChange={(e) => setForm({ ...form, savingsGoal: e.target.value.replace(/[^0-9]/g, "") })}
+              placeholder="e.g. 1000"
+              required
+            />
+          </label>
+
+          {error && <p className="form-error">{error}</p>}
+
+          <button className="primary-button pressable" disabled={busy} type="submit" style={{ marginTop: "12px" }}>
+            {busy ? "Setting up..." : "Start managing budget"}
+          </button>
+        </form>
       </section>
     </main>
   );
