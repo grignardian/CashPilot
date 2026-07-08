@@ -32,7 +32,8 @@ import {
   Tv,
   GraduationCap,
   HeartPulse,
-  Gift
+  Gift,
+  Tags
 } from "lucide-react";
 import { AuthProvider } from "./context/AuthContext";
 import { DataProvider } from "./context/DataContext";
@@ -1056,7 +1057,7 @@ function CustomDropdown({ value, options, onChange }) {
           </>
         )}
         {!selected && <span className="custom-dropdown-value"></span>}
-        <svg className={`custom-dropdown-chevron ${open ? "open" : ""}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+        <Tags className="custom-dropdown-chevron" size={16} />
       </button>
       {open && createPortal(
         <div className="custom-dropdown-backdrop" onMouseDown={() => setOpen(false)}>
