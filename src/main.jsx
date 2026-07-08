@@ -455,7 +455,6 @@ function OnboardingScreen({ profile, updateSettings }) {
               inputMode="numeric"
               value={form.allowance}
               onChange={(e) => setForm({ ...form, allowance: e.target.value.replace(/[^0-9]/g, "") })}
-              placeholder="e.g. 5000"
               required
             />
           </label>
@@ -466,7 +465,6 @@ function OnboardingScreen({ profile, updateSettings }) {
               inputMode="numeric"
               value={form.savingsGoal}
               onChange={(e) => setForm({ ...form, savingsGoal: e.target.value.replace(/[^0-9]/g, "") })}
-              placeholder="e.g. 1000"
               required
             />
           </label>
