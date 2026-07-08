@@ -96,6 +96,7 @@ function CashPilotApp() {
   const [screen, setScreen] = useState("home");
   const [aiOpen, setAiOpen] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [splitContext, setSplitContext] = useState(null);
   const [query, setQuery] = useState("");
   const [theme, setTheme] = useState(() => localStorage.getItem("cashpilot-theme") || "dark");
   const settings = profile.settings;
@@ -257,7 +258,15 @@ function CashPilotApp() {
               onRecords={() => setScreen("records")}
             />
           )}
-          {screen === "add" && <AddExpenseScreen onAdd={addExpense} onOpenModal={() => setModalOpen(true)} />}
+          {screen === "add" && (
+            <AddExpenseScreen 
+              onAdd={addExpense} 
+              onOpenModal={(formValues) => {
+                setSplitContext(formValues);
+                setModalOpen(true);
+              }} 
+            />
+          )}
           {screen === "records" && (
             <RecordsScreen
               query={query}
@@ -287,7 +296,15 @@ function CashPilotApp() {
         </div>
         <BottomTabs active={screen} setScreen={setScreen} />
       </section>
-      {modalOpen && <StudentModal onClose={() => setModalOpen(false)} expenseId={null} addSplit={addSplit} />}
+      {modalOpen && (
+        <StudentModal 
+          onClose={() => { setModalOpen(false); setSplitContext(null); }} 
+          expenseId={null} 
+          addSplit={addSplit} 
+          splitContext={splitContext}
+          onAdd={addExpense}
+        />
+      )}
       <InstallPrompt />
     </main>
   );
@@ -1136,7 +1153,7 @@ function AddExpenseScreen({ onAdd, onOpenModal }) {
         </label>
         <div className="form-actions">
           <button className="primary-button pressable" type="submit" disabled={saving}>{saving ? "Saving..." : "Save expense"}</button>
-          <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }} type="button" onClick={onOpenModal}>Split with friend</button>
+          <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }} type="button" onClick={() => onOpenModal(form)}>Split with friend</button>
         </div>
         {error && <p className="form-error">{error}</p>}
       </form>
@@ -1772,8 +1789,12 @@ function BottomTabs({ active, setScreen }) {
   );
 }
 
-function StudentModal({ onClose, expenseId, addSplit }) {
-  const [form, setForm] = useState({ friendName: "", amount: "", yourShare: "" });
+function StudentModal({ onClose, expenseId, addSplit, splitContext, onAdd }) {
+  const [form, setForm] = useState({ 
+    friendName: "", 
+    amount: splitContext?.amount || "", 
+    yourShare: "" 
+  });
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
@@ -1791,12 +1812,33 @@ function StudentModal({ onClose, expenseId, addSplit }) {
     }
     setError("");
     try {
-      await addSplit({ expenseId: expenseId || "", originalAmount, yourShare, friendName: form.friendName.trim() });
+      // 1. Create the split record in Firebase splits collection
+      await addSplit({ 
+        expenseId: expenseId || "", 
+        originalAmount, 
+        yourShare, 
+        friendName: form.friendName.trim() 
+      });
+
+      // 2. Automatically log the user's share as a regular transaction
+      if (onAdd) {
+        const title = splitContext?.title 
+          ? `${splitContext.title} (Split with ${form.friendName.trim()})`
+          : `Split with ${form.friendName.trim()}`;
+        await onAdd({
+          title,
+          amount: yourShare,
+          category: splitContext?.category || "Other",
+          date: splitContext?.date || today(),
+          note: splitContext?.note || ""
+        });
+      }
+
       setSuccess(true);
       setTimeout(() => {
         onClose();
       }, 1500);
-    } catch {
+    } catch (err) {
       setError("Could not create split. Try again.");
     }
   };
