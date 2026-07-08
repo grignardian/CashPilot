@@ -1972,7 +1972,7 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
                   Your share: {currency(split.yourShare)} · Friend owes: {currency(split.friendShare)}
                 </p>
               </div>
-              <button className="primary-button pressable" style={{ padding: "8px 16px", fontSize: "12px", height: "fit-content", flexShrink: 0 }} onClick={() => settleSplit(split.id)}>
+              <button className="primary-button pressable" style={{ width: "auto", margin: 0, padding: "8px 16px", fontSize: "12px", height: "fit-content", flexShrink: 0 }} onClick={() => settleSplit(split.id)}>
                 Settle
               </button>
             </div>
@@ -1993,7 +1993,7 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
                   Settled{split.settledDate ? ` on ${split.settledDate}` : ""}
                 </p>
               </div>
-              <button className="primary-button pressable" style={{ padding: "6px 12px", fontSize: "11px", height: "fit-content", flexShrink: 0, background: "rgba(255, 255, 255, 0.08)", color: "var(--text)", border: "1px solid var(--border)" }} onClick={() => unsettleSplit(split.id)}>
+              <button className="primary-button pressable" style={{ width: "auto", margin: 0, padding: "6px 12px", fontSize: "11px", height: "fit-content", flexShrink: 0, background: "rgba(255, 255, 255, 0.08)", color: "var(--text)", border: "1px solid var(--border)" }} onClick={() => unsettleSplit(split.id)}>
                 Undo
               </button>
             </div>
