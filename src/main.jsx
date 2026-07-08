@@ -399,7 +399,7 @@ function LoadingScreen() {
 }
 
 function OnboardingScreen({ profile, updateSettings }) {
-  const [form, setForm] = useState({ allowance: "5000", savingsGoal: "1000" });
+  const [form, setForm] = useState({ allowance: "", savingsGoal: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
