@@ -1469,7 +1469,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
           <p>Monthly allowance</p>
           <AmountInput value={String(settings.allowance || "")} onChange={(val) => update("allowance", val)} />
         </section>
-        <section className="detail-card">
+        <section className="detail-card tint">
           <p>Savings goal</p>
           <AmountInput value={String(settings.savingsGoal || "")} onChange={(val) => update("savingsGoal", val)} />
         </section>

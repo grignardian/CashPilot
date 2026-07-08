@@ -862,12 +862,16 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .detail-card.tint {
   background: var(--accent-light);
   border-color: transparent;
-  color: #161221;
+  color: #000000;
+}
+
+.detail-card.tint p {
+  color: #000000;
 }
 
 .detail-card.tint .money-input input {
   background: rgba(0,0,0,0.08);
-  color: #161221;
+  color: #000000;
 }
 
 .detail-card strong {
@@ -2353,7 +2357,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 [data-theme="light"] .detail-card.tint {
   background: var(--accent-light);
-  color: #2d1f5e;
+  color: #000000;
 }
 
 [data-theme="light"] .eye-toggle {
@@ -2406,12 +2410,12 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .detail-card.tint .custom-dropdown-trigger {
   background: rgba(0, 0, 0, 0.08);
   border-color: rgba(0, 0, 0, 0.12);
-  color: #161221;
+  color: #000000;
 }
 
 .detail-card.tint .custom-dropdown-trigger svg {
-  color: #161221;
-  opacity: 0.5;
+  color: #000000;
+  opacity: 0.7;
 }
 
 .detail-card .custom-dropdown-value {
