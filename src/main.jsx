@@ -634,7 +634,7 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
             {balanceHidden ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
-        <h1>{balanceHidden ? "₹ ••••••" : currency(totals.left)}</h1>
+        <h1>{balanceHidden ? `₹ ${totals.left < 0 ? "-" : ""}${"•".repeat(Math.max(1, Math.round(Math.abs(totals.left)).toString().length))}` : currency(totals.left)}</h1>
         <AreaChart totals={totals} allowance={settings.allowance} />
       </section>
 
