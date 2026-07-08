@@ -559,7 +559,7 @@ function AuthScreen({ authError, onSignIn, onSignUp, onGoogle }) {
 
 function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, onAdd, onRecords }) {
   const [aiAdvice, setAiAdvice] = useState("");
-  const [balanceHidden, setBalanceHidden] = useState(false);
+  const [balanceHidden, setBalanceHidden] = useState(true);
 
   useEffect(() => {
     const topCats = totals.byCategory
