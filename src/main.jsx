@@ -193,6 +193,11 @@ function CashPilotApp() {
   };
 
   const deleteExpense = async (id) => {
+    const tx = transactions.find((t) => t.id === id);
+    if (tx && tx.type === "income") {
+      const newAllowance = Math.max(0, settings.allowance - Number(tx.amount || 0));
+      await updateSettings({ ...settings, allowance: newAllowance });
+    }
     await deleteTransaction(id);
     refreshAlerts();
   };
