@@ -1173,9 +1173,19 @@ function AddExpenseScreen({ onAdd, onOpenModal }) {
 }
 
 function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd, splits, settleSplit, unsettleSplit }) {
+  const [splitsSpaceOpen, setSplitsSpaceOpen] = useState(false);
+
   const filtered = expenses.filter((item) =>
     `${item.title} ${item.category} ${item.note}`.toLowerCase().includes(query.toLowerCase())
   );
+
+  const pendingSplitsAmount = (splits || [])
+    .filter(s => s.status === "pending")
+    .reduce((sum, s) => sum + (s.friendShare || 0), 0);
+
+  const settledSplitsAmount = (splits || [])
+    .filter(s => s.status === "settled")
+    .reduce((sum, s) => sum + (s.friendShare || 0), 0);
 
   return (
     <div className="page utility-page">
@@ -1189,7 +1199,10 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd, splits, set
       </label>
       <div className="record-toolbar">
         <span>{filtered.length} records</span>
-        <button className="dark-pill pressable" onClick={onAdd}>Add new</button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button className="dark-pill pressable" style={{ background: "rgba(169, 141, 245, 0.08)", border: "1px solid rgba(169, 141, 245, 0.2)", color: "var(--accent-light)" }} onClick={() => setSplitsSpaceOpen(true)}>Split records</button>
+          <button className="dark-pill pressable" onClick={onAdd}>Add new</button>
+        </div>
       </div>
       <div className="expense-list full">
         {filtered.map((item) => (
@@ -1197,6 +1210,101 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd, splits, set
         ))}
       </div>
       {filtered.length === 0 && <p className="empty-state">No matching expense records yet.</p>}
+
+      {splitsSpaceOpen && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => setSplitsSpaceOpen(false)}>
+          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 450px)", maxHeight: "85vh", display: "flex", flexDirection: "column", padding: "24px" }}>
+            <button className="close-button" aria-label="Close" onClick={() => setSplitsSpaceOpen(false)}>
+              <X size={16} />
+            </button>
+            <h2 style={{ margin: "0 0 16px 0", fontSize: "20px", fontWeight: "700" }}>Split records space</h2>
+            
+            {/* Split Stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+              <div style={{ background: "rgba(255, 200, 100, 0.04)", border: "1px solid rgba(255, 200, 100, 0.12)", borderRadius: "12px", padding: "12px 14px" }}>
+                <span style={{ color: "var(--text-secondary)", fontSize: "11px", display: "block" }}>Friends owe you</span>
+                <strong style={{ display: "block", fontSize: "18px", color: "var(--warning)", marginTop: "4px" }}>
+                  {currency(pendingSplitsAmount)}
+                </strong>
+              </div>
+              <div style={{ background: "rgba(200, 240, 192, 0.04)", border: "1px solid rgba(200, 240, 192, 0.12)", borderRadius: "12px", padding: "12px 14px" }}>
+                <span style={{ color: "var(--text-secondary)", fontSize: "11px", display: "block" }}>Total settled</span>
+                <strong style={{ display: "block", fontSize: "18px", color: "var(--accent-light)", marginTop: "4px" }}>
+                  {currency(settledSplitsAmount)}
+                </strong>
+              </div>
+            </div>
+
+            {/* Scrollable Splits List */}
+            <div style={{ flex: 1, overflowY: "auto", paddingRight: "4px" }}>
+              {splits && splits.length > 0 ? (
+                splits.map((split) => {
+                  const isPending = split.status === "pending";
+                  return (
+                    <div 
+                      key={split.id} 
+                      style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        justifyContent: "space-between", 
+                        borderRadius: "10px", 
+                        padding: "10px 12px", 
+                        marginBottom: "8px", 
+                        background: "var(--surface-raised)", 
+                        border: "1px solid var(--border)" 
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0, paddingRight: "10px" }}>
+                        <strong style={{ display: "block", fontSize: "13px", color: "var(--text)" }}>
+                          Split with {split.friendName}
+                        </strong>
+                        <small style={{ color: "var(--text-secondary)", fontSize: "11px", display: "block", marginTop: "2px" }}>
+                          Total: {currency(split.originalAmount)} · Share: {currency(split.yourShare)} · Owed: {currency(split.friendShare)}
+                        </small>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                        <span 
+                          style={{ 
+                            fontSize: "10px", 
+                            fontWeight: "500",
+                            padding: "2px 6px", 
+                            borderRadius: "4px", 
+                            background: isPending ? "rgba(255, 200, 100, 0.08)" : "rgba(200, 240, 192, 0.08)", 
+                            color: isPending ? "var(--warning)" : "var(--accent-light)" 
+                          }}
+                        >
+                          {isPending ? "Pending" : "Settled"}
+                        </span>
+                        <button 
+                          className="primary-button pressable" 
+                          style={{ 
+                            width: "auto", 
+                            margin: 0, 
+                            padding: "4px 8px", 
+                            fontSize: "11px", 
+                            height: "fit-content", 
+                            background: isPending ? "rgba(169, 141, 245, 0.15)" : "rgba(255, 255, 255, 0.08)", 
+                            border: isPending ? "1px solid rgba(169, 141, 245, 0.3)" : "1px solid var(--border)", 
+                            color: isPending ? "var(--accent-light)" : "var(--text)" 
+                          }} 
+                          onClick={() => isPending ? settleSplit(split.id) : unsettleSplit(split.id)}
+                        >
+                          {isPending ? "Settle" : "Undo"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p style={{ color: "var(--text-secondary)", fontSize: "13px", textAlign: "center", margin: "32px 0" }}>
+                  No split records found.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
