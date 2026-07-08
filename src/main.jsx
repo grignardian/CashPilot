@@ -1691,20 +1691,20 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
       if (totals.left >= goalVal) {
         const margin = totals.left - goalVal;
         list.push({
-          title: "🎉 Savings goal safe",
+          title: "Savings goal safe",
           body: `You are on track to save ${currency(goalVal)}. You have a safety margin of ${currency(margin)} remaining.`,
           type: "success"
         });
       } else if (totals.left > 0) {
         const deficit = goalVal - totals.left;
         list.push({
-          title: "⚠️ Savings target warning",
+          title: "Savings target warning",
           body: `You are short of your ${currency(goalVal)} savings goal by ${currency(deficit)}. Try to reduce non-essential spend!`,
           type: "warning"
         });
       } else {
         list.push({
-          title: "🚨 Savings goal deficit",
+          title: "Savings goal deficit",
           body: `You have completely exhausted your budget. Any extra spend directly cuts into your core savings of ${currency(goalVal)}!`,
           type: "danger"
         });
@@ -1714,13 +1714,13 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
     // 2. Safe daily limit / Runway
     if (totals.left > 0) {
       list.push({
-        title: "💰 Safe daily limit",
+        title: "Safe daily limit",
         body: `You can safely spend ${currency(totals.dailyLimit)} per day for the remaining ${daysRemaining} days.`,
         type: "success"
       });
     } else {
       list.push({
-        title: "💸 Out of runway",
+        title: "Out of runway",
         body: `Remaining budget: ₹0. Limit daily spends completely to protect your savings.`,
         type: "danger"
       });
@@ -1737,19 +1737,19 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
       if (percentage > 30) {
         if (topCat.name === "Food") {
           list.push({
-            title: "🍔 High food expenses",
+            title: "High food expenses",
             body: `Food accounts for ${percentage}% of your budget (total ${currency(topCat.total)}). Consider cooking or budget meals.`,
             type: "warning"
           });
         } else if (topCat.name === "Entertainment") {
           list.push({
-            title: "🍿 Fun & movies watch",
+            title: "Entertainment watch",
             body: `You spent ${percentage}% of your expenses on entertainment. Keep tabs on leisure spends!`,
             type: "warning"
           });
         } else {
           list.push({
-            title: `🏷️ Top category: ${topCat.name}`,
+            title: `Top category: ${topCat.name}`,
             body: `${topCat.name} accounts for ${percentage}% of your total spends (${currency(topCat.total)}) this month.`,
             type: "info"
           });
@@ -1761,7 +1761,7 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
     const dayOfWeek = now.getDay();
     if (dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0) {
       list.push({
-        title: "🗓️ Weekend spending mode",
+        title: "Weekend spending mode",
         body: "Weekends are peak spend times. Stick to your daily budget limit and avoid impulsive orders.",
         type: "warning"
       });
@@ -1773,13 +1773,13 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
     const noSpendDays = daysPassed - activeDaysThisMonth;
     if (noSpendDays > 0) {
       list.push({
-        title: "🧘 Budget discipline check",
+        title: "Budget discipline check",
         body: `Excellent work! You had ${noSpendDays} 'No Spend' days so far this month.`,
         type: "success"
       });
     } else {
       list.push({
-        title: "🔥 Continuous spend alert",
+        title: "Continuous spend alert",
         body: "You've logged spends every day this month. Challenge yourself to a 'No Spend' day tomorrow!",
         type: "info"
       });
@@ -1790,7 +1790,7 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
     const idealAveragePerDay = Number(settings?.allowance || 0) / daysInMonth;
     if (averageSpentPerDay > idealAveragePerDay * 1.2 && totals.left > 0) {
       list.push({
-        title: "⚡ High burn rate",
+        title: "High burn rate",
         body: `You are burning budget at ${currency(averageSpentPerDay)}/day compared to ideal ${currency(idealAveragePerDay)}/day.`,
         type: "warning"
       });
@@ -1888,13 +1888,12 @@ function InboxScreen({ totals, settings, expenses, onBudget, notifications, onRe
             iconBg = "rgba(169, 141, 245, 0.15)";
           }
           return (
-            <div className="message-card" key={nudge.title} style={{ cursor: "default" }}>
+            <div className="message-card" key={nudge.title} style={{ cursor: "default", display: "grid", gridTemplateColumns: "36px 1fr", gap: "14px" }}>
               <span style={{ background: iconBg, color: iconColor }}><NudgeIcon size={18} /></span>
               <div>
                 <strong>{nudge.title}</strong>
                 <p>{nudge.body}</p>
               </div>
-              <span />
             </div>
           );
         })}
