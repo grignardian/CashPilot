@@ -1658,11 +1658,11 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
       </form>
 
       {deleteModalOpen && createPortal(
-        <div className="modal-backdrop" onClick={() => { setDeleteModalOpen(false); setConfirmNameInput(""); }}>
-          <div className="student-modal" onClick={(e) => e.stopPropagation()} style={{ border: "1px solid rgba(239, 68, 68, 0.2)", padding: "20px 24px" }}>
+        <div className="modal-backdrop" onMouseDown={() => { setDeleteModalOpen(false); setConfirmNameInput(""); }}>
+          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 450px)", padding: "20px 24px" }}>
             <div className="modal-header" style={{ marginBottom: "12px" }}>
-              <h3 style={{ color: "var(--danger)", display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "18px" }}>
-                <Trash2 size={20} /> Danger Zone: Delete Data
+              <h3 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "18px", color: "var(--text)" }}>
+                <Trash2 size={20} /> Delete Data
               </h3>
             </div>
             
