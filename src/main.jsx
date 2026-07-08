@@ -843,7 +843,15 @@ function DateInput({ value, onChange }) {
 
 function CustomDropdown({ value, options, onChange }) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((opt) => opt.name === value);
+
+  // Support both string[] and object[] (with .name, .icon, .color)
+  const isStringOptions = options.length === 0 || typeof options[0] === "string";
+  const normalize = (opt) =>
+    isStringOptions ? { name: opt, color: null, icon: null } : opt;
+
+  const selected = isStringOptions
+    ? (options.includes(value) ? normalize(value) : null)
+    : options.find((opt) => opt.name === value);
 
   return (
     <div className="custom-dropdown">
@@ -854,9 +862,11 @@ function CustomDropdown({ value, options, onChange }) {
       >
         {selected && (
           <>
-            <span className="custom-dropdown-icon" style={{ background: selected.color }}>
-              <selected.icon size={14} />
-            </span>
+            {selected.color && selected.icon && (
+              <span className="custom-dropdown-icon" style={{ background: selected.color }}>
+                <selected.icon size={14} />
+              </span>
+            )}
             <span className="custom-dropdown-value">{selected.name}</span>
           </>
         )}
@@ -867,19 +877,22 @@ function CustomDropdown({ value, options, onChange }) {
         <div className="custom-dropdown-backdrop" onMouseDown={() => setOpen(false)}>
           <div className="custom-dropdown-menu" onMouseDown={(e) => e.stopPropagation()}>
             {options.map((opt) => {
-              const OptIcon = opt.icon;
+              const norm = normalize(opt);
+              const OptIcon = norm.icon;
               return (
                 <button
                   type="button"
-                  key={opt.name}
-                  className={`custom-dropdown-item ${opt.name === value ? "active" : ""}`}
-                  onClick={() => { onChange(opt.name); setOpen(false); }}
+                  key={norm.name}
+                  className={`custom-dropdown-item ${norm.name === value ? "active" : ""}`}
+                  onClick={() => { onChange(norm.name); setOpen(false); }}
                 >
-                  <span className="custom-dropdown-icon" style={{ background: opt.color }}>
-                    <OptIcon size={14} />
-                  </span>
-                  <span>{opt.name}</span>
-                  {opt.name === value && (
+                  {OptIcon && norm.color && (
+                    <span className="custom-dropdown-icon" style={{ background: norm.color }}>
+                      <OptIcon size={14} />
+                    </span>
+                  )}
+                  <span>{norm.name}</span>
+                  {norm.name === value && (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                   )}
                 </button>
@@ -892,6 +905,7 @@ function CustomDropdown({ value, options, onChange }) {
     </div>
   );
 }
+
 
 function AddExpenseScreen({ onAdd, onOpenModal }) {
   const [form, setForm] = useState({

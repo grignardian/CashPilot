@@ -40,7 +40,7 @@
   --radius: 16px;
   --radius-sm: 12px;
   --radius-pill: 999px;
-  --font-serif: Georgia, "Times New Roman", serif;
+  --font-serif: "Inter", sans-serif;
   color: var(--text);
   background: var(--bg);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
