@@ -657,10 +657,11 @@ function AreaChart({ totals, allowance }) {
   const topPadding = 14;
   const bottomPadding = 26;
   const chartHeight = height - topPadding - bottomPadding;
-  const monthlyMoney = Math.max(Number(allowance || 0), totals.spent, 1);
+
+  const maxVal = Number(allowance || 0);
 
   // If no budget and no spending, show a flat line at the top
-  if (Number(allowance || 0) === 0 && totals.spent === 0) {
+  if (maxVal === 0 && totals.spent === 0) {
     const flatY = topPadding + 4;
     return (
       <svg className="area-chart" viewBox="0 0 340 165" preserveAspectRatio="none" aria-hidden="true">
@@ -677,23 +678,53 @@ function AreaChart({ totals, allowance }) {
     );
   }
 
-  let remaining = monthlyMoney;
-
-  const points = Array.from({ length: daysInMonth }, (_, index) => {
-    const day = index + 1;
-    const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (day <= todayDate) {
-      remaining -= Number(totals.byDate[dateKey] || 0);
+  // Pre-calculate daily cumulative expenses up to today
+  const dailyCumulativeExpenses = [];
+  let cumulative = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    if (d <= todayDate) {
+      cumulative += Number(totals.byDate[dateKey] || 0);
     }
-    const projectedRemaining = day > todayDate ? totals.left : remaining;
-    const x = daysInMonth === 1 ? 0 : (index / (daysInMonth - 1)) * width;
-    const y = topPadding + (1 - Math.max(0, projectedRemaining) / monthlyMoney) * chartHeight;
+    dailyCumulativeExpenses.push(cumulative);
+  }
+
+  // Find minVal across all days to handle over-budget scenarios gracefully
+  let minVal = maxVal;
+  for (let d = 1; d <= todayDate; d++) {
+    const remaining = maxVal - dailyCumulativeExpenses[d - 1];
+    if (remaining < minVal) {
+      minVal = remaining;
+    }
+  }
+  // Ensure minVal is at most 0 to show zero axis properly if over budget
+  minVal = Math.min(0, minVal);
+
+  const valSpan = Math.max(maxVal - minVal, 1);
+
+  // Generate points: index 0 is start of month (day 0), 1..daysInMonth are end of days
+  const points = Array.from({ length: daysInMonth + 1 }, (_, index) => {
+    const day = index;
+    const x = (index / daysInMonth) * width;
+    
+    let remaining;
+    if (day === 0) {
+      remaining = maxVal;
+    } else if (day <= todayDate) {
+      remaining = maxVal - dailyCumulativeExpenses[day - 1];
+    } else {
+      remaining = totals.left;
+    }
+
+    const y = topPadding + (1 - (remaining - minVal) / valSpan) * chartHeight;
     return { x, y };
   });
 
   const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
   const areaPath = `${linePath} L${width} ${height} L0 ${height} Z`;
-  const spentY = topPadding + (totals.spent / monthlyMoney) * chartHeight;
+  
+  // zeroY represents the y coordinate for 0 remaining budget
+  const zeroY = topPadding + (1 - (0 - minVal) / valSpan) * chartHeight;
 
   return (
     <svg className="area-chart" viewBox="0 0 340 165" preserveAspectRatio="none" aria-hidden="true">
@@ -705,7 +736,7 @@ function AreaChart({ totals, allowance }) {
         </linearGradient>
       </defs>
       <path d={areaPath} fill="url(#chartFill)" />
-      <line className="chart-baseline" x1="0" x2={width} y1={spentY} y2={spentY} />
+      <line className="chart-baseline" x1="0" x2={width} y1={zeroY} y2={zeroY} />
       <path className="chart-line" d={linePath} />
     </svg>
   );
