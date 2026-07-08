@@ -2,8 +2,8 @@ import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/fires
 import { db } from "../config";
 
 const defaultSettings = {
-  allowance: 12000,
-  savingsGoal: 2500
+  allowance: 0,
+  savingsGoal: 0
 };
 
 export const defaultProfile = {

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 import {
   ArrowRightLeft,
   Bell,
@@ -8,15 +9,19 @@ import {
   CalendarDays,
   ChevronRight,
   Coffee,
+  Eye,
+  EyeOff,
   Home,
   IndianRupee,
   LogOut,
   Mail,
+  Moon,
   Plus,
   ReceiptText,
   Search,
   Settings as SettingsIcon,
   Sparkles,
+  Sun,
   Target,
   Utensils,
   User,
@@ -26,7 +31,15 @@ import {
 import { AuthProvider } from "./context/AuthContext";
 import { DataProvider } from "./context/DataContext";
 import { useAuth } from "./hooks/useAuth";
+import { useAlerts } from "./hooks/useAlerts";
+import { useBudgetMetrics } from "./hooks/useBudgetMetrics";
+import { useNotifications } from "./hooks/useNotifications";
+import { useRecurringExpenses } from "./hooks/useRecurringExpenses";
 import { useData } from "./hooks/useData";
+import { getTierForAmount } from "./utils/calendarHeatmap";
+import { suggestCategoryAndName, getSpendingAdvice, isGeminiConfigured } from "./utils/geminiIntegration";
+import { exportDataAsJSON, exportAsCSV, downloadFile } from "./utils/dataExport";
+import { generateMonthlyRecap, saveMonthlyRecap } from "./utils/dataManagement";
 import "./styles.css";
 
 const categories = [
@@ -62,18 +75,59 @@ function CashPilotApp() {
     profile,
     accounts,
     goals,
+    recurring: firebaseRecurring,
+    splits,
     loadingData,
     error: dataError,
     addTransaction,
     deleteTransaction,
     updateProfile,
-    updateSettings
+    updateSettings,
+    addRecurring: addRecurringToFirebase,
+    deleteRecurring: deleteRecurringFromFirebase,
+    addSplit,
+    settleSplit: settleSplitAction,
+    deleteSplit
   } = useData();
   const [screen, setScreen] = useState("home");
   const [aiOpen, setAiOpen] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [theme, setTheme] = useState(() => localStorage.getItem("cashpilot-theme") || "dark");
   const settings = profile.settings;
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("cashpilot-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => t === "dark" ? "light" : "dark");
+
+  // Utility hooks integration
+  const budgetMetrics = useBudgetMetrics(transactions, settings);
+  const { alerts, alertCount, hasCritical, dismiss: dismissAlert, refresh: refreshAlerts } = useAlerts(transactions, settings);
+  const { unreadCount, notifications, add: addNotification, read: readNotification, readAll: readAllNotifications, remove: removeNotification, refresh: refreshNotifications } = useNotifications();
+  const { recurring, dueItems, suggestions: recurringSuggestions, add: addRecurring, remove: removeRecurring, markLogged, refresh: refreshRecurring } = useRecurringExpenses(transactions);
+
+  // Generate monthly recap when transactions change
+  useEffect(() => {
+    if (transactions.length > 0) {
+      const now = new Date();
+      const month = now.getMonth();
+      const year = now.getFullYear();
+      const result = generateMonthlyRecap(month, year, transactions, settings.allowance, settings.savingsGoal);
+      saveMonthlyRecap(result);
+    }
+  }, [transactions.length]);
+
+  // Notify about due recurring expenses
+  useEffect(() => {
+    if (dueItems.length > 0) {
+      dueItems.forEach((item) => {
+        addNotification("reminder", `${item.name} is due`, `₹${item.amount} · ${item.frequency}`, "info");
+      });
+    }
+  }, [dueItems.length]);
 
   const expenses = useMemo(() => transactions.map(transactionToExpense), [transactions]);
 
@@ -101,10 +155,10 @@ function CashPilotApp() {
       todaySpent,
       byCategory,
       byDate,
-      dailyLimit: Math.max(0, Math.floor(left / 28)),
+      dailyLimit: budgetMetrics.safeDaily,
       savingsProgress: Math.min(100, Math.max(0, ((left > 0 ? left : 0) / settings.savingsGoal) * 100))
     };
-  }, [expenses, settings]);
+  }, [expenses, settings, budgetMetrics.safeDaily]);
 
   const addExpense = async (expense) => {
     await addTransaction({
@@ -115,11 +169,14 @@ function CashPilotApp() {
       note: [expense.title, expense.note].filter(Boolean).join(" · "),
       dateKey: expense.date
     });
+    refreshAlerts();
+    refreshRecurring();
     setScreen("records");
   };
 
   const deleteExpense = async (id) => {
     await deleteTransaction(id);
+    refreshAlerts();
   };
 
   if (loading) return <LoadingScreen />;
@@ -137,14 +194,22 @@ function CashPilotApp() {
 
   return (
     <main className="stage">
-      <section className="app-shell" aria-label="CashPilot student budget planner">
+      <section className="app-shell" aria-label="CashPilot budget planner">
         <StatusBar />
         <Sidebar active={screen} setScreen={setScreen} totals={totals} />
         <div className="screen">
-          <DesktopHeader screen={screen} setScreen={setScreen} onLogout={logOut} />
+          <DesktopHeader screen={screen} setScreen={setScreen} onLogout={logOut} unreadCount={unreadCount} />
           {(dataError || loadingData) && (
             <div className={`app-notice ${dataError ? "error" : ""}`}>
               {dataError || "Syncing your budget..."}
+            </div>
+          )}
+          {!dataError && !loadingData && alertCount > 0 && (
+            <div className={`app-notice ${hasCritical ? "error" : ""}`}>
+              {alerts[0].type === "daily"
+                ? `You've spent ₹${Math.round(budgetMetrics.todaySpent)} today. Safe limit: ₹${Math.round(budgetMetrics.safeDaily)}.`
+                : `Monthly spending at ₹${Math.round(budgetMetrics.monthSpent)} of ₹${Math.round(settings.allowance - settings.savingsGoal)} available.`
+              }
             </div>
           )}
           {screen === "home" && (
@@ -169,9 +234,9 @@ function CashPilotApp() {
               onAdd={() => setScreen("add")}
             />
           )}
-          {screen === "budget" && <BudgetScreen settings={settings} updateSettings={updateSettings} totals={totals} />}
+          {screen === "budget" && <BudgetScreen settings={settings} updateSettings={updateSettings} totals={totals} addTransaction={addTransaction} accounts={accounts} firebaseRecurring={firebaseRecurring} addRecurringToFirebase={addRecurringToFirebase} deleteRecurringFromFirebase={deleteRecurringFromFirebase} />}
           {screen === "calendar" && <CalendarScreen expenses={expenses} totals={totals} onAdd={() => setScreen("add")} />}
-          {screen === "inbox" && <InboxScreen totals={totals} onBudget={() => setScreen("budget")} />}
+          {screen === "inbox" && <InboxScreen totals={totals} onBudget={() => setScreen("budget")} notifications={notifications} onReadNotification={readNotification} splits={splits} settleSplit={settleSplitAction} />}
           {screen === "settings" && (
             <SettingsScreen
               profile={profile}
@@ -179,12 +244,18 @@ function CashPilotApp() {
               updateProfile={updateProfile}
               updateSettings={updateSettings}
               onLogout={logOut}
+              transactions={transactions}
+              accounts={accounts}
+              goals={goals}
+              theme={theme}
+              toggleTheme={toggleTheme}
             />
           )}
         </div>
         <BottomTabs active={screen} setScreen={setScreen} />
       </section>
-      {modalOpen && <StudentModal onClose={() => setModalOpen(false)} />}
+      {modalOpen && <StudentModal onClose={() => setModalOpen(false)} expenseId={null} addSplit={addSplit} />}
+      <InstallPrompt />
     </main>
   );
 }
@@ -207,8 +278,7 @@ const navItems = [
   { id: "records", icon: Search, label: "Records" },
   { id: "add", icon: Plus, label: "Add" },
   { id: "calendar", icon: CalendarDays, label: "Calendar" },
-  { id: "budget", icon: ArrowRightLeft, label: "Budget" },
-  { id: "settings", icon: SettingsIcon, label: "Settings" }
+  { id: "budget", icon: ArrowRightLeft, label: "Budget" }
 ];
 
 function Sidebar({ active, setScreen, totals }) {
@@ -242,37 +312,25 @@ function Sidebar({ active, setScreen, totals }) {
   );
 }
 
-function DesktopHeader({ screen, setScreen, onLogout }) {
-  const titleMap = {
-    home: "Student dashboard",
-    add: "Log expense",
-    records: "Daily records",
-    budget: "Monthly budget",
-    calendar: "Expense calendar",
-    inbox: "Smart nudges",
-    settings: "User settings"
-  };
-
+function DesktopHeader({ screen, setScreen, onLogout, unreadCount }) {
   return (
     <header className="desktop-header">
       <div>
-        <p>College budget planner</p>
-        <h1>{titleMap[screen]}</h1>
+        <p>Expenses manager</p>
+        <h1>CashPilot</h1>
+        <p className="credit-line">Made with 💜 by Labhansh</p>
       </div>
       <div className="desktop-actions">
         <button className="invite pressable" onClick={() => setScreen("calendar")}>
           <CalendarDays size={15} />
-          May 2026
+          {new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" })}
         </button>
         <button className="icon-ring pressable" aria-label="Notifications" onClick={() => setScreen("inbox")}>
           <Bell size={19} />
+          {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
         </button>
         <button className="icon-ring pressable" aria-label="Settings" onClick={() => setScreen("settings")}>
           <SettingsIcon size={18} />
-        </button>
-        <button className="primary-button compact pressable" onClick={() => setScreen("add")}>
-          <Plus size={17} />
-          Add expense
         </button>
         <button className="icon-ring pressable" aria-label="Sign out" onClick={onLogout}>
           <LogOut size={18} />
@@ -298,13 +356,16 @@ function StatusBar() {
 
 function LoadingScreen() {
   return (
-    <main className="stage">
-      <section className="auth-card">
-        <div className="brand-mark">
-          <Sparkles size={18} />
+    <main className="stage auth-stage">
+      <section className="auth-card" style={{ textAlign: "center", padding: "48px 28px" }}>
+        <div className="brand-mark" style={{ justifyContent: "center" }}>
+          <Sparkles size={22} />
           <span>CashPilot</span>
         </div>
-        <p className="auth-subtitle">Loading your student budget...</p>
+        <p className="auth-subtitle" style={{ marginTop: "16px" }}>Loading your budget...</p>
+        <div style={{ marginTop: "24px", height: "4px", borderRadius: "99px", overflow: "hidden", background: "var(--border)" }}>
+          <div style={{ height: "100%", width: "60%", borderRadius: "99px", background: "var(--accent-light)", animation: "shimmer 1.5s ease infinite", backgroundSize: "200% 100%", backgroundImage: "linear-gradient(90deg, var(--accent) 25%, var(--accent-light) 50%, var(--accent) 75%)" }} />
+        </div>
       </section>
     </main>
   );
@@ -352,7 +413,7 @@ function AuthScreen({ authError, onSignIn, onSignUp, onGoogle }) {
           <Sparkles size={18} />
           <span>CashPilot</span>
         </div>
-        <h1>{mode === "signup" ? "Create your student wallet" : "Welcome back"}</h1>
+        <h1>{mode === "signup" ? "Create your own wallet" : "Welcome back"}</h1>
         <p className="auth-subtitle">Sign in to sync expenses, calendar marks, and budget records across devices.</p>
 
         <form className="auth-form" onSubmit={submit}>
@@ -388,6 +449,27 @@ function AuthScreen({ authError, onSignIn, onSignUp, onGoogle }) {
 }
 
 function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, onAdd, onRecords }) {
+  const [aiAdvice, setAiAdvice] = useState("");
+  const [balanceHidden, setBalanceHidden] = useState(false);
+
+  useEffect(() => {
+    const topCats = totals.byCategory
+      .filter((c) => c.total > 0)
+      .slice(0, 3)
+      .map((c) => `${c.name} ${Math.round((c.total / Math.max(totals.spent, 1)) * 100)}%`)
+      .join(", ");
+
+    getSpendingAdvice({
+      budget: settings.allowance,
+      savingsGoal: settings.savingsGoal,
+      spent: totals.spent,
+      daysRemaining: Math.max(1, new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate()),
+      topCategories: topCats || "none yet"
+    }).then((result) => {
+      if (result?.advice) setAiAdvice(result.advice);
+    }).catch(() => {});
+  }, [totals.spent, settings.allowance, settings.savingsGoal]);
+
   return (
     <div className="page home-page">
       <div className="home-actions">
@@ -404,14 +486,19 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
       </div>
 
       <section className="balance-block">
-        <p className="eyebrow">Monthly money left <span>·</span> Student wallet</p>
-        <h1>{currency(totals.left)}</h1>
+        <div className="balance-header">
+          <p className="eyebrow">Monthly money left</p>
+          <button className="eye-toggle pressable" onClick={() => setBalanceHidden(!balanceHidden)} aria-label={balanceHidden ? "Show balance" : "Hide balance"}>
+            {balanceHidden ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+        <h1>{balanceHidden ? "₹ ••••••" : currency(totals.left)}</h1>
         <AreaChart totals={totals} allowance={settings.allowance} />
       </section>
 
       <div className="stat-row">
         <MiniStat title="Spent today" percent="live" value={currency(totals.todaySpent)} />
-        <MiniStat title="Monthly spend" percent={`${expenses.length} logs`} value={currency(totals.spent)} />
+        <MiniStat title="Safe daily spend" percent={`${totals.left > 0 ? "on track" : "over"}`} value={currency(totals.dailyLimit)} />
       </div>
 
       {aiOpen && (
@@ -421,10 +508,10 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
           </button>
           <div className="ai-label">
             <Sparkles size={16} />
-            <span>CashPilot student forecast</span>
+            <span>CashPilot forecast</span>
           </div>
           <div className="ai-content">
-            <h2>{totals.left >= settings.savingsGoal ? "You can hit this month's savings goal." : "Cut snacks by ₹80/day to stay on track."}</h2>
+            <h2>{aiAdvice || (totals.left >= settings.savingsGoal ? "You can hit this month's savings goal." : "Cut snacks by ₹80/day to stay on track.")}</h2>
             <button className="dark-pill pressable" onClick={onAdd}>
               Log spend
             </button>
@@ -462,6 +549,25 @@ function AreaChart({ totals, allowance }) {
   const bottomPadding = 26;
   const chartHeight = height - topPadding - bottomPadding;
   const monthlyMoney = Math.max(Number(allowance || 0), totals.spent, 1);
+
+  // If no budget and no spending, show a flat line at the top
+  if (Number(allowance || 0) === 0 && totals.spent === 0) {
+    const flatY = topPadding + 4;
+    return (
+      <svg className="area-chart" viewBox="0 0 340 165" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#a98df5" stopOpacity="0.58" />
+            <stop offset="78%" stopColor="#7c5cbf" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="#0d0d0d" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <line className="chart-baseline" x1="0" x2={width} y1={height / 2} y2={height / 2} />
+        <path className="chart-line" d={`M0 ${flatY} L${width} ${flatY}`} />
+      </svg>
+    );
+  }
+
   let remaining = monthlyMoney;
 
   const points = Array.from({ length: daysInMonth }, (_, index) => {
@@ -569,7 +675,7 @@ function GoalPreview({ goals }) {
   return (
     <section className="student-panel goal-preview">
       <div className="panel-heading">
-        <h2>Student goals</h2>
+        <h2>Goals</h2>
         <span>{goals.length} active</span>
       </div>
       {goals.slice(0, 3).map((goal) => {
@@ -593,17 +699,225 @@ function GoalPreview({ goals }) {
   );
 }
 
+function AmountInput({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [display, setDisplay] = useState(String(value || ""));
+
+  const handleKey = (key) => {
+    if (key === "backspace") {
+      setDisplay((prev) => prev.slice(0, -1));
+    } else if (key === "clear") {
+      setDisplay("");
+    } else if (key === "done") {
+      onChange(display);
+      setOpen(false);
+    } else if (key === ".") {
+      if (!display.includes(".")) setDisplay((prev) => prev + ".");
+    } else {
+      setDisplay((prev) => prev + key);
+    }
+  };
+
+  const openCalc = () => {
+    setDisplay(String(value || ""));
+    setOpen(true);
+  };
+
+  return (
+    <>
+      <button type="button" className="custom-dropdown-trigger" onClick={openCalc}>
+        <span className="custom-dropdown-value">
+          {value ? `₹ ${Number(value).toLocaleString("en-IN")}` : ""}
+        </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/><line x1="8" y1="18" x2="8" y2="18.01"/><line x1="12" y1="18" x2="16" y2="18"/></svg>
+      </button>
+      {open && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => { onChange(display); setOpen(false); }}>
+          <div className="calc-popup" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="calc-display">
+              <span className="calc-currency">₹</span>
+              <span className="calc-amount">{display || "0"}</span>
+            </div>
+            <div className="calc-grid">
+              {["7","8","9","4","5","6","1","2","3",".","0","backspace"].map((key) => (
+                <button type="button" key={key} className={`calc-key pressable ${key === "backspace" ? "calc-key-action" : ""}`} onClick={() => handleKey(key)}>
+                  {key === "backspace" ? "⌫" : key}
+                </button>
+              ))}
+            </div>
+            <div className="calc-actions">
+              <button type="button" className="calc-clear pressable" onClick={() => handleKey("clear")}>Clear</button>
+              <button type="button" className="calc-done pressable" onClick={() => handleKey("done")}>Done</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+function DateInput({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(value || new Date().toISOString().slice(0, 10));
+
+  const parsed = new Date(selectedDate + "T00:00:00");
+  const year = parsed.getFullYear();
+  const month = parsed.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const totalDays = new Date(year, month + 1, 0).getDate();
+  const monthLabel = parsed.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+  const cells = [
+    ...Array.from({ length: firstDay }, () => null),
+    ...Array.from({ length: totalDays }, (_, i) => i + 1)
+  ];
+
+  const prevMonth = () => {
+    const d = new Date(year, month - 1, 1);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  };
+
+  const nextMonth = () => {
+    const d = new Date(year, month + 1, 1);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  };
+
+  const pickDay = (day) => {
+    const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    setSelectedDate(dateKey);
+    onChange(dateKey);
+    setOpen(false);
+  };
+
+  const openPicker = () => {
+    setSelectedDate(value || new Date().toISOString().slice(0, 10));
+    setOpen(true);
+  };
+
+  const displayValue = value
+    ? new Date(value + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+    : "";
+
+  return (
+    <>
+      <button type="button" className="custom-dropdown-trigger" onClick={openPicker}>
+        <span className="custom-dropdown-value">{displayValue}</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </button>
+      {open && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => setOpen(false)}>
+          <div className="datepicker-popup" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="datepicker-header">
+              <button type="button" className="datepicker-nav pressable" onClick={prevMonth}>‹</button>
+              <span className="datepicker-month">{monthLabel}</span>
+              <button type="button" className="datepicker-nav pressable" onClick={nextMonth}>›</button>
+            </div>
+            <div className="datepicker-weekdays">
+              {["S","M","T","W","T","F","S"].map((d, i) => <span key={i}>{d}</span>)}
+            </div>
+            <div className="datepicker-grid">
+              {cells.map((day, index) => {
+                if (!day) return <span key={`e-${index}`} />;
+                const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const isSelected = dateKey === value;
+                const isToday = dateKey === new Date().toISOString().slice(0, 10);
+                return (
+                  <button
+                    type="button"
+                    key={dateKey}
+                    className={`datepicker-day pressable ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`}
+                    onClick={() => pickDay(day)}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+function CustomDropdown({ value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((opt) => opt.name === value);
+
+  return (
+    <div className="custom-dropdown">
+      <button
+        type="button"
+        className="custom-dropdown-trigger"
+        onClick={() => setOpen(!open)}
+      >
+        {selected && (
+          <>
+            <span className="custom-dropdown-icon" style={{ background: selected.color }}>
+              <selected.icon size={14} />
+            </span>
+            <span className="custom-dropdown-value">{selected.name}</span>
+          </>
+        )}
+        {!selected && <span className="custom-dropdown-value"></span>}
+        <svg className={`custom-dropdown-chevron ${open ? "open" : ""}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+      </button>
+      {open && createPortal(
+        <div className="custom-dropdown-backdrop" onMouseDown={() => setOpen(false)}>
+          <div className="custom-dropdown-menu" onMouseDown={(e) => e.stopPropagation()}>
+            {options.map((opt) => {
+              const OptIcon = opt.icon;
+              return (
+                <button
+                  type="button"
+                  key={opt.name}
+                  className={`custom-dropdown-item ${opt.name === value ? "active" : ""}`}
+                  onClick={() => { onChange(opt.name); setOpen(false); }}
+                >
+                  <span className="custom-dropdown-icon" style={{ background: opt.color }}>
+                    <OptIcon size={14} />
+                  </span>
+                  <span>{opt.name}</span>
+                  {opt.name === value && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 function AddExpenseScreen({ onAdd, onOpenModal }) {
   const [form, setForm] = useState({
     title: "",
     amount: "",
-    category: "Food",
-    date: today(),
+    category: "",
+    date: "",
     note: ""
   });
 
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [aiHint, setAiHint] = useState("");
+
+  const handleTitleBlur = async () => {
+    if (form.title.trim().length < 3) return;
+    try {
+      const suggestion = await suggestCategoryAndName(form.title.trim());
+      if (suggestion && suggestion.confidence >= 0.7) {
+        setForm((prev) => ({ ...prev, category: suggestion.suggestedCategory }));
+        setAiHint(`AI suggested: ${suggestion.suggestedCategory}`);
+        setTimeout(() => setAiHint(""), 3000);
+      }
+    } catch { /* ignore AI errors */ }
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -615,7 +929,12 @@ function AddExpenseScreen({ onAdd, onOpenModal }) {
     setSaving(true);
     setError("");
     try {
-      await onAdd({ ...form, amount });
+      await onAdd({
+        ...form,
+        amount,
+        category: form.category || "Other",
+        date: form.date || today()
+      });
     } catch {
       setError("Could not save this expense. Please try again.");
     } finally {
@@ -633,29 +952,32 @@ function AddExpenseScreen({ onAdd, onOpenModal }) {
       <form className="expense-form" onSubmit={submit}>
         <label>
           <span>Expense name</span>
-          <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="e.g. Maggi at canteen" />
+          <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} onBlur={handleTitleBlur} placeholder="" />
+          {aiHint && <small style={{ color: "#c8f0c0", fontSize: "11px", marginTop: "4px" }}>{aiHint}</small>}
         </label>
         <label>
           <span>Amount in rupees</span>
-          <input inputMode="numeric" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="₹ 0" />
+          <AmountInput value={form.amount} onChange={(val) => setForm({ ...form, amount: val })} />
         </label>
         <label>
           <span>Category</span>
-          <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-            {categories.map((item) => <option key={item.name}>{item.name}</option>)}
-          </select>
+          <CustomDropdown
+            value={form.category}
+            options={categories}
+            onChange={(val) => setForm({ ...form, category: val })}
+          />
         </label>
         <label>
           <span>Date</span>
-          <input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
+          <DateInput value={form.date} onChange={(val) => setForm({ ...form, date: val })} />
         </label>
         <label className="wide-field">
           <span>Note</span>
-          <input value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="Optional note" />
+          <input value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="" />
         </label>
         <div className="form-actions">
           <button className="primary-button pressable" type="submit" disabled={saving}>{saving ? "Saving..." : "Save expense"}</button>
-          <button className="outline-pill pressable" type="button" onClick={onOpenModal}>Split with friend</button>
+          <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }} type="button" onClick={onOpenModal}>Split with friend</button>
         </div>
         {error && <p className="form-error">{error}</p>}
       </form>
@@ -671,12 +993,12 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd }) {
   return (
     <div className="page utility-page">
       <section className="hero-copy utility-hero">
-        <h1>Daily records</h1>
+        <h1>Daily <span>records</span></h1>
         <p>Search, review, and clean up every rupee you logged this month.</p>
       </section>
       <label className="search-field">
         <Search size={18} />
-        <input placeholder="Search food, auto, books..." value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
       <div className="record-toolbar">
         <span>{filtered.length} records</span>
@@ -695,51 +1017,121 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd }) {
 function ExpenseRow({ expense, onDelete }) {
   const category = categories.find((item) => item.name === expense.category) || categories.at(-1);
   const Icon = category.icon;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleDeleteClick = () => setConfirmOpen(true);
+
+  const handleConfirm = () => {
+    setConfirmOpen(false);
+    onDelete(expense.id);
+  };
 
   return (
-    <article className="expense-row">
-      <span className="category-icon" style={{ background: category.color }}>
-        <Icon size={17} />
-      </span>
-      <div>
-        <strong>{expense.title}</strong>
-        <small>{expense.category} · {expense.date}{expense.note ? ` · ${expense.note}` : ""}</small>
-      </div>
-      <b>{currency(expense.amount)}</b>
-      {onDelete && (
-        <button className="delete-expense pressable" aria-label={`Delete ${expense.title}`} onClick={() => onDelete(expense.id)}>
-          <X size={14} />
-        </button>
+    <>
+      <article className="expense-row">
+        <span className="category-icon" style={{ background: category.color }}>
+          <Icon size={17} />
+        </span>
+        <div>
+          <strong>{expense.title}</strong>
+          <small>{expense.category} · {expense.date}{expense.note ? ` · ${expense.note}` : ""}</small>
+        </div>
+        <b>{currency(expense.amount)}</b>
+        {onDelete && (
+          <button className="delete-expense pressable" aria-label={`Delete ${expense.title}`} onClick={handleDeleteClick}>
+            <X size={14} />
+          </button>
+        )}
+      </article>
+
+      {confirmOpen && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => setConfirmOpen(false)}>
+          <div className="modal-card delete-confirm-card" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-icon" style={{ background: "rgba(245, 200, 216, 0.15)", color: "var(--pink)" }}>
+              <X size={20} />
+            </div>
+            <h2>Delete expense?</h2>
+            <p>
+              <strong style={{ color: "var(--text)" }}>{expense.title}</strong> · {currency(expense.amount)}
+              <br />This action cannot be undone.
+            </p>
+            <button className="primary-button pressable" style={{ background: "#c0392b", marginTop: "20px" }} onClick={handleConfirm}>
+              Delete
+            </button>
+            <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", marginTop: "10px" }} onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
-    </article>
+    </>
   );
 }
 
-function BudgetScreen({ settings, updateSettings, totals }) {
+function BudgetScreen({ settings, updateSettings, totals, addTransaction, accounts, firebaseRecurring, addRecurringToFirebase, deleteRecurringFromFirebase }) {
+  const [addMoneyOpen, setAddMoneyOpen] = useState(false);
+  const [addRecurringOpen, setAddRecurringOpen] = useState(false);
+  const [recurringForm, setRecurringForm] = useState({ name: "", amount: "", category: "Food", frequency: "monthly" });
+  const [addAmount, setAddAmount] = useState("");
+  const [addNote, setAddNote] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addMsg, setAddMsg] = useState("");
+
   const update = (key, value) => {
-    updateSettings({ ...settings, [key]: Number(value.replace(/[^0-9]/g, "")) || 0 });
+    updateSettings({ ...settings, [key]: Number(String(value).replace(/[^0-9]/g, "")) || 0 });
+  };
+
+  const handleAddMoney = async () => {
+    const amount = Number(addAmount);
+    if (!amount) return;
+    setAdding(true);
+    setAddMsg("");
+    try {
+      await addTransaction({
+        amount,
+        type: "income",
+        category: "Other",
+        accountId: accounts?.[0]?.id || "",
+        note: addNote || "Extra income",
+        dateKey: new Date().toISOString().slice(0, 10)
+      });
+      // Also increase the allowance for this month
+      updateSettings({ ...settings, allowance: settings.allowance + amount });
+      setAddMsg(`Added ₹${amount.toLocaleString("en-IN")} to your budget.`);
+      setAddAmount("");
+      setAddNote("");
+      setTimeout(() => { setAddMoneyOpen(false); setAddMsg(""); }, 1500);
+    } catch {
+      setAddMsg("Could not add money. Try again.");
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
     <div className="page budget-page">
-      <section className="hero-copy goals-hero">
-        <h1>Your monthly<br />student budget</h1>
+      <section className="hero-copy utility-hero">
+        <h1>Your<br /><span>monthly budget</span></h1>
         <p>Tune your allowance and savings goal. CashPilot recalculates what you can spend each day.</p>
       </section>
+
+      <button
+        className="primary-button pressable"
+        style={{ marginTop: "16px", background: "var(--green)", color: "#111", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+        onClick={() => setAddMoneyOpen(true)}
+      >
+        <Plus size={18} /> Add money to budget
+      </button>
+
       <div className="detail-grid">
         <section className="detail-card tint">
           <p>Monthly allowance</p>
-          <label className="money-input">
-            <span>₹</span>
-            <input value={settings.allowance} inputMode="numeric" onChange={(event) => update("allowance", event.target.value)} />
-          </label>
+          <AmountInput value={String(settings.allowance || "")} onChange={(val) => update("allowance", val)} />
         </section>
         <section className="detail-card">
           <p>Savings goal</p>
-          <label className="money-input">
-            <span>₹</span>
-            <input value={settings.savingsGoal} inputMode="numeric" onChange={(event) => update("savingsGoal", event.target.value)} />
-          </label>
+          <AmountInput value={String(settings.savingsGoal || "")} onChange={(val) => update("savingsGoal", val)} />
         </section>
         <section className="detail-card">
           <p>Spent so far</p>
@@ -762,11 +1154,127 @@ function BudgetScreen({ settings, updateSettings, totals }) {
           <span style={{ width: `${totals.savingsProgress}%` }} />
         </div>
       </section>
+
+      <section className="student-panel" style={{ marginTop: "20px" }}>
+        <div className="panel-heading">
+          <h2>Recurring expenses</h2>
+          <button className="primary-button pressable" style={{ padding: "6px 14px", fontSize: "13px" }} onClick={() => setAddRecurringOpen(true)}>
+            <Plus size={14} /> Add
+          </button>
+        </div>
+        {(!firebaseRecurring || firebaseRecurring.length === 0) && (
+          <p style={{ color: "var(--muted)", fontSize: "14px", padding: "12px 0" }}>No recurring expenses yet. Add subscriptions, rent, or regular bills.</p>
+        )}
+        {firebaseRecurring && firebaseRecurring.filter(r => r.isActive).map((item) => {
+          const isDue = item.nextDueDate && item.nextDueDate <= new Date().toISOString().slice(0, 10);
+          return (
+            <div className="category-row" key={item.id} style={{ background: isDue ? "rgba(255, 100, 100, 0.08)" : undefined, borderRadius: "8px", padding: "10px 12px", marginBottom: "6px" }}>
+              <div style={{ flex: 1 }}>
+                <strong>{item.name}</strong>
+                <p style={{ fontSize: "12px", color: "var(--muted)", margin: "2px 0 0" }}>
+                  {currency(item.amount)} · {item.category} · {item.frequency}{isDue ? " · Due!" : item.nextDueDate ? ` · Next: ${item.nextDueDate}` : ""}
+                </p>
+              </div>
+              <button className="pressable" style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer" }} onClick={() => deleteRecurringFromFirebase(item.id)} aria-label="Delete recurring expense">
+                <X size={16} />
+              </button>
+            </div>
+          );
+        })}
+      </section>
+
+      {addRecurringOpen && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => setAddRecurringOpen(false)}>
+          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="close-button" aria-label="Close" onClick={() => setAddRecurringOpen(false)}>
+              <X size={16} />
+            </button>
+            <div className="modal-icon">
+              <ArrowRightLeft size={20} />
+            </div>
+            <h2>Add recurring expense</h2>
+            <form className="expense-form" style={{ marginTop: "12px", gap: "10px" }} onSubmit={async (e) => {
+              e.preventDefault();
+              if (!recurringForm.name.trim() || !recurringForm.amount) return;
+              const nextDue = (() => {
+                const d = new Date();
+                switch (recurringForm.frequency) {
+                  case "daily": d.setDate(d.getDate() + 1); break;
+                  case "weekly": d.setDate(d.getDate() + 7); break;
+                  case "biweekly": d.setDate(d.getDate() + 14); break;
+                  default: d.setMonth(d.getMonth() + 1); break;
+                }
+                return d.toISOString().slice(0, 10);
+              })();
+              await addRecurringToFirebase({
+                name: recurringForm.name.trim(),
+                amount: Number(recurringForm.amount),
+                category: recurringForm.category,
+                frequency: recurringForm.frequency,
+                nextDueDate: nextDue,
+                isActive: true,
+                lastLoggedDate: null
+              });
+              setRecurringForm({ name: "", amount: "", category: "Food", frequency: "monthly" });
+              setAddRecurringOpen(false);
+            }}>
+              <label>
+                <span>Name</span>
+                <input value={recurringForm.name} onChange={(e) => setRecurringForm({ ...recurringForm, name: e.target.value })} placeholder="e.g. Netflix, Rent" style={{ height: "44px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg)", color: "var(--text)", padding: "0 14px", outline: "none", width: "100%" }} />
+              </label>
+              <label>
+                <span>Amount</span>
+                <AmountInput value={recurringForm.amount} onChange={(val) => setRecurringForm({ ...recurringForm, amount: val })} />
+              </label>
+              <label>
+                <span>Category</span>
+                <CustomDropdown value={recurringForm.category} options={categories.map(c => c.name)} onChange={(val) => setRecurringForm({ ...recurringForm, category: val })} />
+              </label>
+              <label>
+                <span>Frequency</span>
+                <CustomDropdown value={recurringForm.frequency} options={["daily", "weekly", "biweekly", "monthly"]} onChange={(val) => setRecurringForm({ ...recurringForm, frequency: val })} />
+              </label>
+              <button className="primary-button pressable" type="submit" disabled={!recurringForm.name.trim() || !recurringForm.amount}>Add recurring</button>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {addMoneyOpen && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => setAddMoneyOpen(false)}>
+          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="close-button" aria-label="Close" onClick={() => setAddMoneyOpen(false)}>
+              <X size={16} />
+            </button>
+            <div className="modal-icon" style={{ background: "rgba(200, 240, 192, 0.15)", color: "var(--green)" }}>
+              <Plus size={20} />
+            </div>
+            <h2>Add money</h2>
+            <p style={{ marginBottom: "16px" }}>Got extra pocket money, freelance pay, or a refund? Add it to this month's budget.</p>
+            <div className="expense-form" style={{ marginTop: "0", gap: "10px" }}>
+              <label>
+                <span>Amount</span>
+                <AmountInput value={addAmount} onChange={(val) => setAddAmount(val)} />
+              </label>
+              <label>
+                <span>Note (optional)</span>
+                <input value={addNote} onChange={(e) => setAddNote(e.target.value)} placeholder="" style={{ height: "44px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg)", color: "var(--text)", padding: "0 14px", outline: "none", width: "100%" }} />
+              </label>
+            </div>
+            {addMsg && <p style={{ marginTop: "12px", fontSize: "13px", color: "var(--green)" }}>{addMsg}</p>}
+            <button className="primary-button pressable" disabled={adding || !addAmount} onClick={handleAddMoney} style={{ marginTop: "16px" }}>
+              {adding ? "Adding..." : "Add to budget"}
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
 
-function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLogout }) {
+function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLogout, transactions, accounts, goals, theme, toggleTheme }) {
   const [form, setForm] = useState({
     name: profile.name || "",
     allowance: String(settings.allowance || 0),
@@ -799,6 +1307,18 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleExportJSON = () => {
+    const json = exportDataAsJSON({ profile, transactions: transactions || [], accounts: accounts || [], goals: goals || [] });
+    downloadFile(json, `cashpilot-backup-${new Date().toISOString().slice(0, 10)}.json`, "application/json");
+    setMessage("Backup exported as JSON.");
+  };
+
+  const handleExportCSV = () => {
+    const csv = exportAsCSV(transactions || []);
+    downloadFile(csv, `cashpilot-expenses-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv");
+    setMessage("Expenses exported as CSV.");
   };
 
   return (
@@ -840,7 +1360,15 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
         </section>
         <div className="form-actions">
           <button className="primary-button pressable" type="submit" disabled={saving}>{saving ? "Saving..." : "Save settings"}</button>
-          <button className="outline-pill pressable" type="button" onClick={onLogout}>Sign out</button>
+          <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text)", marginTop: "0" }} type="button" onClick={toggleTheme}>
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            <span style={{ marginLeft: "8px" }}>{theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}</span>
+          </button>
+          <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text)", marginTop: "0" }} type="button" onClick={onLogout}>Sign out</button>
+        </div>
+        <div className="form-actions">
+          <button className="outline-pill pressable" type="button" onClick={handleExportJSON}>Export backup (JSON)</button>
+          <button className="outline-pill pressable" type="button" onClick={handleExportCSV}>Export expenses (CSV)</button>
         </div>
         {message && <p className="form-error success-message">{message}</p>}
       </form>
@@ -848,9 +1376,111 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
   );
 }
 
+function CalendarGraphs({ totals, expenses }) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Daily spending bar chart data
+  const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return totals.byDate[dateKey] || 0;
+  });
+  const maxDaily = Math.max(...dailyData, 1);
+
+  // Category donut data
+  const catData = totals.byCategory.filter((c) => c.total > 0);
+  const catTotal = catData.reduce((sum, c) => sum + c.total, 0);
+
+  // Weekly trend (last 4 weeks)
+  const weeklyData = [];
+  for (let i = 3; i >= 0; i--) {
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() - (i * 7));
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekStart.getDate() - 6);
+    let weekTotal = 0;
+    expenses.forEach((exp) => {
+      if (exp.type === "expense" && exp.date >= weekStart.toISOString().slice(0, 10) && exp.date <= weekEnd.toISOString().slice(0, 10)) {
+        weekTotal += Number(exp.amount || 0);
+      }
+    });
+    weeklyData.push({ label: `W${4 - i}`, total: weekTotal });
+  }
+  const maxWeekly = Math.max(...weeklyData.map((w) => w.total), 1);
+
+  return (
+    <>
+      <section className="student-panel" style={{ marginTop: "20px" }}>
+        <div className="panel-heading">
+          <h2>Daily spending</h2>
+          <span>This month</span>
+        </div>
+        <div className="bar-chart">
+          {dailyData.map((val, i) => (
+            <div key={i} className="bar-chart-col">
+              <div className="bar-chart-bar" style={{ height: `${(val / maxDaily) * 100}%` }} />
+              {(i + 1) % 5 === 0 && <span className="bar-chart-label">{i + 1}</span>}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="student-panel" style={{ marginTop: "14px" }}>
+        <div className="panel-heading">
+          <h2>Weekly trend</h2>
+          <span>Last 4 weeks</span>
+        </div>
+        <div className="weekly-chart">
+          {weeklyData.map((week, i) => (
+            <div key={i} className="weekly-chart-item">
+              <div className="weekly-chart-bar-wrap">
+                <div className="weekly-chart-bar" style={{ height: `${(week.total / maxWeekly) * 100}%` }} />
+              </div>
+              <span className="weekly-chart-label">{week.label}</span>
+              <span className="weekly-chart-value">{currency(week.total)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {catData.length > 0 && (
+        <section className="student-panel" style={{ marginTop: "14px" }}>
+          <div className="panel-heading">
+            <h2>Category split</h2>
+            <span>{currency(catTotal)} total</span>
+          </div>
+          <div className="category-bar-chart">
+            {catData.map((cat) => {
+              const pct = catTotal > 0 ? (cat.total / catTotal) * 100 : 0;
+              return (
+                <div key={cat.name} className="category-bar-row">
+                  <span className="category-bar-name">{cat.name}</span>
+                  <div className="category-bar-track">
+                    <div className="category-bar-fill" style={{ width: `${pct}%`, background: cat.color }} />
+                  </div>
+                  <span className="category-bar-pct">{Math.round(pct)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
 function CalendarScreen({ expenses, totals, onAdd }) {
-  const [selectedDate, setSelectedDate] = useState(today());
-  const monthDate = new Date(`${selectedDate.slice(0, 7)}-01T00:00:00`);
+  const [viewMonth, setViewMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [closing, setClosing] = useState(false);
+
+  const monthDate = new Date(`${viewMonth}-01T00:00:00`);
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
   const monthName = monthDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
@@ -860,9 +1490,30 @@ function CalendarScreen({ expenses, totals, onAdd }) {
     ...Array.from({ length: firstDay }, () => null),
     ...Array.from({ length: daysInMonth }, (_, index) => index + 1)
   ];
-  const maxDaySpend = Math.max(...Object.values(totals.byDate), 1);
-  const selectedExpenses = expenses.filter((item) => item.date === selectedDate);
-  const selectedTotal = totals.byDate[selectedDate] || 0;
+
+  const prevMonth = () => {
+    const d = new Date(year, month - 1, 1);
+    setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const nextMonth = () => {
+    const d = new Date(year, month + 1, 1);
+    setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const closePopup = () => {
+    setClosing(true);
+    setTimeout(() => {
+      setSelectedDate(null);
+      setClosing(false);
+    }, 280);
+  };
+
+  const selectedExpenses = selectedDate ? expenses.filter((item) => item.date === selectedDate) : [];
+  const selectedTotal = selectedDate ? (totals.byDate[selectedDate] || 0) : 0;
+  const selectedLabel = selectedDate
+    ? new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "";
 
   return (
     <div className="page calendar-page">
@@ -872,12 +1523,10 @@ function CalendarScreen({ expenses, totals, onAdd }) {
       </section>
 
       <section className="calendar-shell">
-        <div className="calendar-head">
-          <div>
-            <p>Viewing</p>
-            <h2>{monthName}</h2>
-          </div>
-          <button className="dark-pill pressable" onClick={onAdd}>Add expense</button>
+        <div className="calendar-head" style={{ flexDirection: "row", alignItems: "center" }}>
+          <button type="button" className="datepicker-nav pressable" onClick={prevMonth}>‹</button>
+          <h2 style={{ flex: 1, textAlign: "center", fontSize: "17px" }}>{monthName}</h2>
+          <button type="button" className="datepicker-nav pressable" onClick={nextMonth}>›</button>
         </div>
 
         <div className="weekday-row">
@@ -889,7 +1538,8 @@ function CalendarScreen({ expenses, totals, onAdd }) {
             if (!day) return <span className="calendar-cell empty" key={`empty-${index}`} />;
             const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const amount = totals.byDate[dateKey] || 0;
-            const intensity = amount ? 0.22 + (amount / maxDaySpend) * 0.68 : 0;
+            const tier = getTierForAmount(amount);
+            const intensity = tier.alpha;
             return (
               <button
                 key={dateKey}
@@ -905,33 +1555,112 @@ function CalendarScreen({ expenses, totals, onAdd }) {
         </div>
       </section>
 
-      <section className="student-panel calendar-detail">
-        <div className="panel-heading">
-          <h2>{selectedDate}</h2>
-          <span>{currency(selectedTotal)}</span>
-        </div>
-        <div className="expense-list">
-          {selectedExpenses.map((item) => <ExpenseRow key={item.id} expense={item} />)}
-        </div>
-        {selectedExpenses.length === 0 && <p className="empty-state">No expenses logged for this date.</p>}
-      </section>
+      <CalendarGraphs totals={totals} expenses={expenses} />
+
+      {selectedDate && createPortal(
+        <div className={`modal-backdrop ${closing ? "calendar-closing" : ""}`} onMouseDown={closePopup}>
+          <div className="calendar-detail-popup" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="close-button" aria-label="Close" onClick={closePopup}>
+              <X size={16} />
+            </button>
+            <div className="calendar-detail-date">{new Date(selectedDate + "T00:00:00").getDate()}</div>
+            <p className="calendar-detail-label">{selectedLabel}</p>
+            <div className="calendar-detail-total">{currency(selectedTotal)}</div>
+            {selectedExpenses.length > 0 ? (
+              <div className="expense-list" style={{ marginTop: "16px" }}>
+                {selectedExpenses.map((item) => <ExpenseRow key={item.id} expense={item} />)}
+              </div>
+            ) : (
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "16px", textAlign: "center" }}>No expenses on this day</p>
+            )}
+            <button className="primary-button pressable" style={{ marginTop: "16px" }} onClick={() => { closePopup(); setTimeout(onAdd, 300); }}>
+              Add expense
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
 
-function InboxScreen({ totals, onBudget }) {
+function InboxScreen({ totals, onBudget, notifications, onReadNotification, splits, settleSplit }) {
   const messages = [
     ["Daily limit", `You can spend about ${currency(totals.dailyLimit)} per day for the rest of the month.`],
     ["Food check", `${currency(totals.byCategory.find((item) => item.name === "Food")?.total)} spent on food so far.`],
-    ["Savings goal", totals.left > 0 ? `${currency(totals.left)} left after all logged expenses.` : "You are over budget. Update allowance or reduce spends."]
+    ["Savings goal", totals.left > 0 ? `${currency(totals.left)} left after all logged expenses.` : "You are over budget. Update allowance or reduce spends."],
+    ["Monthly spend", `Total: ${currency(totals.spent)} across ${Object.keys(totals.byDate).length} days with spending.`]
   ];
+
+  const pendingSplits = (splits || []).filter(s => s.status === "pending");
+  const settledSplits = (splits || []).filter(s => s.status === "settled");
 
   return (
     <div className="page utility-page">
       <section className="hero-copy utility-hero">
         <h1>Smart nudges</h1>
-        <p>Small, practical reminders for surviving college spending without spreadsheet pain.</p>
+        <p>Alerts, reminders, and insights to help you stay on top of your budget.</p>
       </section>
+
+      {pendingSplits.length > 0 && (
+        <section className="student-panel" style={{ marginBottom: "16px" }}>
+          <div className="panel-heading">
+            <h2>Pending splits</h2>
+            <span>{pendingSplits.length} pending</span>
+          </div>
+          {pendingSplits.map((split) => (
+            <div className="category-row" key={split.id} style={{ borderRadius: "8px", padding: "10px 12px", marginBottom: "6px", background: "rgba(255, 200, 100, 0.06)" }}>
+              <div style={{ flex: 1 }}>
+                <strong>You split {currency(split.originalAmount)} with {split.friendName}</strong>
+                <p style={{ fontSize: "12px", color: "var(--muted)", margin: "2px 0 0" }}>
+                  Your share: {currency(split.yourShare)} · Friend owes: {currency(split.friendShare)} · pending
+                </p>
+              </div>
+              <button className="primary-button pressable" style={{ padding: "6px 12px", fontSize: "12px" }} onClick={() => settleSplit(split.id)}>
+                Settle
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {settledSplits.length > 0 && (
+        <section className="student-panel" style={{ marginBottom: "16px", opacity: 0.6 }}>
+          <div className="panel-heading">
+            <h2>Settled splits</h2>
+          </div>
+          {settledSplits.slice(0, 5).map((split) => (
+            <div className="category-row" key={split.id} style={{ borderRadius: "8px", padding: "8px 12px", marginBottom: "4px" }}>
+              <div style={{ flex: 1 }}>
+                <strong style={{ textDecoration: "line-through" }}>{currency(split.originalAmount)} with {split.friendName}</strong>
+                <p style={{ fontSize: "12px", color: "var(--muted)", margin: "2px 0 0" }}>
+                  Settled{split.settledDate ? ` on ${split.settledDate}` : ""}
+                </p>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {notifications && notifications.length > 0 && (
+        <section className="student-panel">
+          <div className="panel-heading">
+            <h2>Recent alerts</h2>
+            <span>{notifications.length} unread</span>
+          </div>
+          {notifications.slice(0, 5).map((notif) => (
+            <button className="message-card pressable" key={notif.id} onClick={() => onReadNotification(notif.id)} style={{ marginBottom: "8px", width: "100%" }}>
+              <span><Bell size={18} /></span>
+              <div>
+                <strong>{notif.title}</strong>
+                <p>{notif.message}</p>
+              </div>
+              <X size={14} />
+            </button>
+          ))}
+        </section>
+      )}
+
       <div className="message-list">
         {messages.map(([title, body]) => (
           <button className="message-card pressable" key={title} onClick={onBudget}>
@@ -969,7 +1698,35 @@ function BottomTabs({ active, setScreen }) {
   );
 }
 
-function StudentModal({ onClose }) {
+function StudentModal({ onClose, expenseId, addSplit }) {
+  const [form, setForm] = useState({ friendName: "", amount: "", yourShare: "" });
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    const originalAmount = Number(form.amount);
+    const yourShare = Number(form.yourShare);
+    if (!form.friendName.trim() || !originalAmount || !yourShare) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (yourShare > originalAmount) {
+      setError("Your share can't exceed the total amount.");
+      return;
+    }
+    setError("");
+    try {
+      await addSplit({ expenseId: expenseId || "", originalAmount, yourShare, friendName: form.friendName.trim() });
+      setSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch {
+      setError("Could not create split. Try again.");
+    }
+  };
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Split expense">
       <section className="modal-card">
@@ -980,12 +1737,91 @@ function StudentModal({ onClose }) {
           <IndianRupee size={22} />
         </div>
         <h2>Split with friend</h2>
-        <p>Placeholder for splitting a canteen bill, cab fare, or group project purchase. For now, log your own share in rupees.</p>
-        <button className="primary-button pressable" onClick={onClose}>
-          Got it
-        </button>
+        {success ? (
+          <p>Split created successfully!</p>
+        ) : (
+          <form className="expense-form" onSubmit={submit}>
+            <label>
+              <span>Friend's name</span>
+              <input value={form.friendName} onChange={(event) => setForm({ ...form, friendName: event.target.value })} placeholder="" />
+            </label>
+            <label>
+              <span>Total amount</span>
+              <AmountInput value={form.amount} onChange={(val) => setForm({ ...form, amount: val })} />
+            </label>
+            <label>
+              <span>Your share</span>
+              <AmountInput value={form.yourShare} onChange={(val) => setForm({ ...form, yourShare: val })} />
+            </label>
+            {error && <p className="form-error">{error}</p>}
+            <button className="primary-button pressable" type="submit">Split expense</button>
+          </form>
+        )}
       </section>
     </div>
+  );
+}
+
+function InstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    return localStorage.getItem("cashpilot-install-dismissed") === "true";
+  });
+
+  useEffect(() => {
+    // Don't show if already installed or dismissed
+    if (window.matchMedia("(display-mode: standalone)").matches) return;
+    if (dismissed) return;
+
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Show after a 3 second delay
+      setTimeout(() => setShowPrompt(true), 3000);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, [dismissed]);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const result = await deferredPrompt.userChoice;
+    if (result.outcome === "accepted") {
+      setShowPrompt(false);
+    }
+    setDeferredPrompt(null);
+  };
+
+  const handleDismiss = () => {
+    setShowPrompt(false);
+    setDismissed(true);
+    localStorage.setItem("cashpilot-install-dismissed", "true");
+  };
+
+  if (!showPrompt) return null;
+
+  return createPortal(
+    <div className="install-prompt">
+      <div className="install-prompt-content">
+        <button className="close-button" onClick={handleDismiss} aria-label="Dismiss">
+          <X size={14} />
+        </button>
+        <div className="install-prompt-icon">
+          <Sparkles size={20} />
+        </div>
+        <div className="install-prompt-text">
+          <strong>Install CashPilot</strong>
+          <p>Add to home screen for a better experience</p>
+        </div>
+        <button className="install-prompt-btn pressable" onClick={handleInstall}>
+          Install
+        </button>
+      </div>
+    </div>,
+    document.body
   );
 }
 

@@ -29,8 +29,8 @@ async function createUserProfile(user, name) {
       email: user.email,
       currency: "INR",
       settings: {
-        allowance: 12000,
-        savingsGoal: 2500
+        allowance: 0,
+        savingsGoal: 0
       },
       createdAt: serverTimestamp()
     },

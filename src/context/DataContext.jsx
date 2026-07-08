@@ -4,8 +4,11 @@ import { createAccount, deleteAccount as deleteAccountDoc, getAccounts, updateAc
 import { createGoal, deleteGoal as deleteGoalDoc, getGoals, updateGoal as updateGoalDoc } from "../firebase/services/goals";
 import { defaultProfile, ensureProfile, getProfile, updateProfile as updateProfileDoc, updateSettings as updateSettingsDoc } from "../firebase/services/profile";
 import { addTransaction as addTransactionDoc, deleteTransaction as deleteTransactionDoc, getTransactions } from "../firebase/services/transactions";
+import { addRecurring as addRecurringDoc, deleteRecurring as deleteRecurringDoc, getRecurring, updateRecurring as updateRecurringDoc } from "../firebase/services/recurring";
+import { addSplit as addSplitDoc, deleteSplit as deleteSplitDoc, getSplits, settleSplit as settleSplitDoc } from "../firebase/services/splits";
 import { getSummary } from "../firebase/services/summary";
 import { friendlyError } from "../firebase/errors";
+import { cleanupOldData, trackSession } from "../utils/dataManagement";
 
 export const DataContext = createContext(null);
 
@@ -31,8 +34,16 @@ export function DataProvider({ children }) {
   const [profile, setProfile] = useState(defaultProfile);
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState(defaultSummary);
+  const [recurring, setRecurring] = useState([]);
+  const [splits, setSplits] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [error, setError] = useState("");
+
+  // Session tracking and data cleanup on mount
+  useEffect(() => {
+    trackSession();
+    cleanupOldData();
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -41,6 +52,8 @@ export function DataProvider({ children }) {
       setProfile(defaultProfile);
       setTransactions([]);
       setSummary(defaultSummary);
+      setRecurring([]);
+      setSplits([]);
       setLoadingData(false);
       return undefined;
     }
@@ -63,6 +76,8 @@ export function DataProvider({ children }) {
       getAccounts(user.uid, setAccounts, handleError),
       getGoals(user.uid, setGoals, handleError),
       getSummary(user.uid, setSummary, handleError),
+      getRecurring(user.uid, setRecurring, handleError),
+      getSplits(user.uid, setSplits, handleError),
       getTransactions(user.uid, { limit: 100 }, (items) => {
         setTransactions(items);
         setLoadingData(false);
@@ -91,6 +106,8 @@ export function DataProvider({ children }) {
       profile,
       summary,
       transactions,
+      recurring,
+      splits,
       loadingData,
       error,
       addAccount: (accountData) => withUser((userId) => createAccount(userId, accountData)),
@@ -102,9 +119,15 @@ export function DataProvider({ children }) {
       updateProfile: (updates) => withUser((userId) => updateProfileDoc(userId, updates)),
       updateSettings: (settings) => withUser((userId) => updateSettingsDoc(userId, settings)),
       addTransaction: (txData) => withUser((userId) => addTransactionDoc(userId, txData)),
-      deleteTransaction: (txId) => withUser((userId) => deleteTransactionDoc(userId, txId))
+      deleteTransaction: (txId) => withUser((userId) => deleteTransactionDoc(userId, txId)),
+      addRecurring: (data) => withUser((userId) => addRecurringDoc(userId, data)),
+      updateRecurring: (id, data) => withUser((userId) => updateRecurringDoc(userId, id, data)),
+      deleteRecurring: (id) => withUser((userId) => deleteRecurringDoc(userId, id)),
+      addSplit: (data) => withUser((userId) => addSplitDoc(userId, data)),
+      settleSplit: (id) => withUser((userId) => settleSplitDoc(userId, id)),
+      deleteSplit: (id) => withUser((userId) => deleteSplitDoc(userId, id))
     }),
-    [accounts, goals, profile, summary, transactions, loadingData, error, user]
+    [accounts, goals, profile, summary, transactions, recurring, splits, loadingData, error, user]
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

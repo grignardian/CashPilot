@@ -1,2 +1,21 @@
+# Environment variables
 .env
-.env.example
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Firebase debug logs
+firebase-debug.log
