@@ -119,6 +119,12 @@ function CashPilotApp() {
   const [prevCycleLeftover, setPrevCycleLeftover] = useState(0);
   const settings = profile.settings;
 
+  // Utility hooks integration
+  const budgetMetrics = useBudgetMetrics(transactions, settings);
+  const { alerts, alertCount, hasCritical, dismiss: dismissAlert, refresh: refreshAlerts } = useAlerts(transactions, settings);
+  const { unreadCount, notifications, add: addNotification, read: readNotification, readAll: readAllNotifications, remove: removeNotification, refresh: refreshNotifications } = useNotifications();
+  const { recurring, dueItems, suggestions: recurringSuggestions, add: addRecurring, remove: removeRecurring, markLogged, refresh: refreshRecurring } = useRecurringExpenses(transactions);
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("cashpilot-theme", theme);
@@ -201,13 +207,6 @@ function CashPilotApp() {
       console.error("Failed to save budget cycle", err);
     }
   };
-
-  // Utility hooks integration
-  const budgetMetrics = useBudgetMetrics(transactions, settings);
-  const { alerts, alertCount, hasCritical, dismiss: dismissAlert, refresh: refreshAlerts } = useAlerts(transactions, settings);
-  const { unreadCount, notifications, add: addNotification, read: readNotification, readAll: readAllNotifications, remove: removeNotification, refresh: refreshNotifications } = useNotifications();
-  const { recurring, dueItems, suggestions: recurringSuggestions, add: addRecurring, remove: removeRecurring, markLogged, refresh: refreshRecurring } = useRecurringExpenses(transactions);
-
   // Generate monthly recap when transactions change
   useEffect(() => {
     if (transactions.length > 0) {
