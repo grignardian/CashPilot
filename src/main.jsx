@@ -33,7 +33,8 @@ import {
   GraduationCap,
   HeartPulse,
   Gift,
-  Tags
+  Tags,
+  Pencil
 } from "lucide-react";
 import { AuthProvider } from "./context/AuthContext";
 import { DataProvider } from "./context/DataContext";
@@ -110,10 +111,20 @@ function CashPilotApp() {
     clearAllUserData
   } = useData();
   const [screen, setScreen] = useState("home");
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [preselectedDate, setPreselectedDate] = useState(null);
   const [aiOpen, setAiOpen] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [splitContext, setSplitContext] = useState(null);
   const [query, setQuery] = useState("");
+
+  const handleSetScreen = (newScreen) => {
+    if (newScreen !== "add") {
+      setEditingExpense(null);
+      setPreselectedDate(null);
+    }
+    setScreen(newScreen);
+  };
   const [theme, setTheme] = useState(() => localStorage.getItem("cashpilot-theme") || "dark");
   const [showResetModal, setShowResetModal] = useState(false);
   const [prevCycleLeftover, setPrevCycleLeftover] = useState(0);
@@ -282,8 +293,26 @@ function CashPilotApp() {
     });
     refreshAlerts();
     refreshRecurring();
-    setScreen("records");
+    handleSetScreen("records");
     return ref;
+  };
+
+  const updateExpense = async (id, updatedFields) => {
+    const originalTx = transactions.find((t) => t.id === id);
+    if (!originalTx) return;
+
+    await updateTransaction(id, {
+      amount: updatedFields.amount,
+      category: updatedFields.category,
+      note: [updatedFields.title, updatedFields.note].filter(Boolean).join(" · "),
+      dateKey: updatedFields.date,
+      type: originalTx.type || "expense"
+    });
+    refreshAlerts();
+    refreshRecurring();
+    setEditingExpense(null);
+    setPreselectedDate(null);
+    setScreen("records");
   };
 
   const deleteExpense = async (id) => {
@@ -327,9 +356,9 @@ function CashPilotApp() {
     <main className="stage">
       <section className="app-shell" aria-label="CashPilot budget planner">
         <StatusBar />
-        <Sidebar active={screen} setScreen={setScreen} totals={totals} />
+        <Sidebar active={screen} setScreen={handleSetScreen} totals={totals} />
         <div className="screen">
-          <DesktopHeader screen={screen} setScreen={setScreen} onLogout={logOut} unreadCount={unreadCount} />
+          <DesktopHeader screen={screen} setScreen={handleSetScreen} onLogout={logOut} unreadCount={unreadCount} />
           {(dataError || loadingData) && (
             <div className={`app-notice ${dataError ? "error" : ""}`}>
               {dataError || "Syncing your budget..."}
@@ -351,8 +380,8 @@ function CashPilotApp() {
               goals={goals}
               aiOpen={aiOpen}
               onDismissAi={() => setAiOpen(false)}
-              onAdd={() => setScreen("add")}
-              onRecords={() => setScreen("records")}
+              onAdd={() => handleSetScreen("add")}
+              onRecords={() => handleSetScreen("records")}
               splits={splits}
               settleSplit={settleSplitAction}
               unsettleSplit={unsettleSplitAction}
@@ -360,7 +389,16 @@ function CashPilotApp() {
           )}
           {screen === "add" && (
             <AddExpenseScreen 
-              onAdd={addExpense} 
+              key={editingExpense ? `edit-${editingExpense.id}` : `add-${preselectedDate || "today"}`}
+              onAdd={addExpense}
+              onUpdate={updateExpense}
+              editingExpense={editingExpense}
+              preselectedDate={preselectedDate}
+              onCancel={() => {
+                setEditingExpense(null);
+                setPreselectedDate(null);
+                setScreen("records");
+              }}
               onOpenModal={(formValues) => {
                 setSplitContext(formValues);
                 setModalOpen(true);
@@ -373,7 +411,11 @@ function CashPilotApp() {
               setQuery={setQuery}
               expenses={expenses}
               onDelete={deleteExpense}
-              onAdd={() => setScreen("add")}
+              onEdit={(exp) => {
+                setEditingExpense(exp);
+                setScreen("add");
+              }}
+              onAdd={() => handleSetScreen("add")}
               splits={splits}
               settleSplit={settleSplitAction}
               unsettleSplit={unsettleSplitAction}
@@ -381,8 +423,25 @@ function CashPilotApp() {
             />
           )}
           {screen === "budget" && <BudgetScreen settings={settings} updateSettings={updateSettings} totals={totals} addTransaction={addTransaction} accounts={accounts} />}
-          {screen === "calendar" && <CalendarScreen expenses={expenses} totals={totals} onAdd={() => setScreen("add")} splits={splits} settleSplit={settleSplitAction} unsettleSplit={unsettleSplitAction} />}
-          {screen === "inbox" && <InboxScreen totals={totals} settings={settings} expenses={expenses} onBudget={() => setScreen("budget")} notifications={notifications} onReadNotification={readNotification} splits={splits} settleSplit={settleSplitAction} unsettleSplit={unsettleSplitAction} />}
+          {screen === "calendar" && (
+            <CalendarScreen
+              expenses={expenses}
+              totals={totals}
+              onAdd={(date) => {
+                setPreselectedDate(date);
+                setScreen("add");
+              }}
+              onDelete={deleteExpense}
+              onEdit={(exp) => {
+                setEditingExpense(exp);
+                setScreen("add");
+              }}
+              splits={splits}
+              settleSplit={settleSplitAction}
+              unsettleSplit={unsettleSplitAction}
+            />
+          )}
+          {screen === "inbox" && <InboxScreen totals={totals} settings={settings} expenses={expenses} onBudget={() => handleSetScreen("budget")} notifications={notifications} onReadNotification={readNotification} splits={splits} settleSplit={settleSplitAction} unsettleSplit={unsettleSplitAction} />}
           {screen === "settings" && (
             <SettingsScreen
               profile={profile}
@@ -399,7 +458,7 @@ function CashPilotApp() {
             />
           )}
         </div>
-        <BottomTabs active={screen} setScreen={setScreen} />
+        <BottomTabs active={screen} setScreen={handleSetScreen} />
       </section>
       {showResetModal && (
         <BudgetResetModal 
@@ -1188,13 +1247,13 @@ function CustomDropdown({ value, options, onChange }) {
 }
 
 
-function AddExpenseScreen({ onAdd, onOpenModal }) {
+function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, onCancel, onOpenModal }) {
   const [form, setForm] = useState({
-    title: "",
-    amount: "",
-    category: "",
-    date: today(),
-    note: ""
+    title: editingExpense ? editingExpense.title : "",
+    amount: editingExpense ? String(editingExpense.amount) : "",
+    category: editingExpense ? editingExpense.category : "",
+    date: editingExpense ? editingExpense.date : (preselectedDate || today()),
+    note: editingExpense ? editingExpense.note : ""
   });
 
   const [error, setError] = useState("");
@@ -1223,12 +1282,21 @@ function AddExpenseScreen({ onAdd, onOpenModal }) {
     setSaving(true);
     setError("");
     try {
-      await onAdd({
-        ...form,
-        amount,
-        category: form.category || "Other",
-        date: form.date || today()
-      });
+      if (editingExpense) {
+        await onUpdate(editingExpense.id, {
+          ...form,
+          amount,
+          category: form.category || "Other",
+          date: form.date || today()
+        });
+      } else {
+        await onAdd({
+          ...form,
+          amount,
+          category: form.category || "Other",
+          date: form.date || today()
+        });
+      }
     } catch {
       setError("Could not save this expense. Please try again.");
     } finally {
@@ -1239,8 +1307,17 @@ function AddExpenseScreen({ onAdd, onOpenModal }) {
   return (
     <div className="page form-page">
       <section className="hero-copy utility-hero">
-        <h1>Log today's<br /><span>expense</span></h1>
-        <p>Add canteen meals, travel, books, subscriptions, hangouts, or any tiny UPI spend before it disappears from memory.</p>
+        {editingExpense ? (
+          <>
+            <h1>Edit your<br /><span>expense</span></h1>
+            <p>Update transaction details, categories, dates, or notes in your budget logs.</p>
+          </>
+        ) : (
+          <>
+            <h1>Log today's<br /><span>expense</span></h1>
+            <p>Add canteen meals, travel, books, subscriptions, hangouts, or any tiny UPI spend before it disappears from memory.</p>
+          </>
+        )}
       </section>
 
       <form className="expense-form" onSubmit={submit}>
@@ -1270,8 +1347,18 @@ function AddExpenseScreen({ onAdd, onOpenModal }) {
           <input value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="" />
         </label>
         <div className="form-actions">
-          <button className="primary-button pressable" type="submit" disabled={saving}>{saving ? "Saving..." : "Save expense"}</button>
-          <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }} type="button" onClick={() => onOpenModal(form)}>Split with friend</button>
+          <button className="primary-button pressable" type="submit" disabled={saving}>
+            {saving ? "Saving..." : (editingExpense ? "Save changes" : "Save expense")}
+          </button>
+          {editingExpense ? (
+            <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }} type="button" onClick={onCancel}>
+              Cancel
+            </button>
+          ) : (
+            <button className="primary-button pressable" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }} type="button" onClick={() => onOpenModal(form)}>
+              Split with friend
+            </button>
+          )}
         </div>
         {error && <p className="form-error">{error}</p>}
       </form>
@@ -1426,7 +1513,7 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd, splits, set
   );
 }
 
-function ExpenseRow({ expense, onDelete, splits = [], settleSplit, unsettleSplit }) {
+function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unsettleSplit }) {
   const category = categories.find((item) => item.name === expense.category) || categories.at(-1);
   const Icon = category.icon;
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -1495,12 +1582,33 @@ function ExpenseRow({ expense, onDelete, splits = [], settleSplit, unsettleSplit
               </button>
             )
           )}
+          {onEdit && (
+            <button 
+              className="edit-expense pressable" 
+              style={{ margin: 0 }}
+              aria-label={`Edit ${expense.title}`} 
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(expense);
+              }}
+            >
+              <Pencil size={14} />
+            </button>
+          )}
+          {onDelete && (
+            <button 
+              className="delete-expense pressable" 
+              style={{ margin: 0 }}
+              aria-label={`Delete ${expense.title}`} 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteClick();
+              }}
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
-        {onDelete && (
-          <button className="delete-expense pressable" aria-label={`Delete ${expense.title}`} onClick={handleDeleteClick}>
-            <X size={14} />
-          </button>
-        )}
       </article>
 
       {confirmOpen && createPortal(
@@ -1938,7 +2046,7 @@ function CalendarGraphs({ totals, expenses }) {
   );
 }
 
-function CalendarScreen({ expenses, totals, onAdd, splits, settleSplit, unsettleSplit }) {
+function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, settleSplit, unsettleSplit }) {
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -2034,12 +2142,25 @@ function CalendarScreen({ expenses, totals, onAdd, splits, settleSplit, unsettle
             <div className="calendar-detail-total">{currency(selectedTotal)}</div>
             {selectedExpenses.length > 0 ? (
               <div className="expense-list" style={{ marginTop: "16px" }}>
-                {selectedExpenses.map((item) => <ExpenseRow key={item.id} expense={item} splits={splits} settleSplit={settleSplit} unsettleSplit={unsettleSplit} />)}
+                {selectedExpenses.map((item) => (
+                  <ExpenseRow 
+                    key={item.id} 
+                    expense={item} 
+                    onDelete={onDelete}
+                    onEdit={(exp) => {
+                      closePopup();
+                      setTimeout(() => onEdit(exp), 300);
+                    }}
+                    splits={splits} 
+                    settleSplit={settleSplit} 
+                    unsettleSplit={unsettleSplit} 
+                  />
+                ))}
               </div>
             ) : (
               <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "16px", textAlign: "center" }}>No expenses on this day</p>
             )}
-            <button className="primary-button pressable" style={{ marginTop: "16px" }} onClick={() => { closePopup(); setTimeout(onAdd, 300); }}>
+            <button className="primary-button pressable" style={{ marginTop: "16px" }} onClick={() => { closePopup(); setTimeout(() => onAdd(selectedDate), 300); }}>
               Add expense
             </button>
           </div>

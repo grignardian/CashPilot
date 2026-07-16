@@ -109,3 +109,68 @@ export async function getTransactionById(userId, txId) {
   const snapshot = await getDoc(doc(db, "users", userId, "transactions", txId));
   return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
 }
+
+export async function updateTransaction(userId, txId, updates) {
+  try {
+    const txRef = doc(db, "users", userId, "transactions", txId);
+    return await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(txRef);
+      if (!snapshot.exists()) throw new Error("Transaction does not exist");
+      const oldTx = snapshot.data();
+      
+      const updatedTx = {
+        ...oldTx,
+        amount: Number(updates.amount || 0),
+        category: updates.category || oldTx.category,
+        accountId: updates.accountId !== undefined ? updates.accountId : oldTx.accountId,
+        goalId: updates.goalId !== undefined ? updates.goalId : oldTx.goalId,
+        note: updates.note !== undefined ? updates.note : oldTx.note,
+        dateKey: updates.dateKey || updates.date || oldTx.dateKey,
+        type: updates.type || oldTx.type
+      };
+
+      transaction.set(txRef, updatedTx);
+
+      // Adjust summary deltas: subtract old, add new
+      let netWorthDiff = 0;
+      let totalIncomeDiff = 0;
+      let totalExpensesDiff = 0;
+
+      // Subtract old
+      if (oldTx.type === "income") {
+        netWorthDiff -= oldTx.amount;
+        totalIncomeDiff -= oldTx.amount;
+      } else if (oldTx.type === "expense") {
+        netWorthDiff += oldTx.amount;
+        totalExpensesDiff -= oldTx.amount;
+      }
+
+      // Add new
+      if (updatedTx.type === "income") {
+        netWorthDiff += updatedTx.amount;
+        totalIncomeDiff += updatedTx.amount;
+      } else if (updatedTx.type === "expense") {
+        netWorthDiff -= updatedTx.amount;
+        totalExpensesDiff += updatedTx.amount;
+      }
+
+      const summaryUpdates = {};
+      if (netWorthDiff !== 0) summaryUpdates.netWorth = increment(netWorthDiff);
+      if (totalIncomeDiff !== 0) summaryUpdates.totalIncome = increment(totalIncomeDiff);
+      if (totalExpensesDiff !== 0) summaryUpdates.totalExpenses = increment(totalExpensesDiff);
+
+      if (Object.keys(summaryUpdates).length > 0) {
+        transaction.set(
+          summaryRef(userId),
+          {
+            ...summaryUpdates,
+            lastUpdated: serverTimestamp()
+          },
+          { merge: true }
+        );
+      }
+    });
+  } catch (error) {
+    throw error;
+  }
+}

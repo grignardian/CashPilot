@@ -3,7 +3,7 @@ import { AuthContext } from "./AuthContext";
 import { createAccount, deleteAccount as deleteAccountDoc, getAccounts, updateAccount as updateAccountDoc } from "../firebase/services/accounts";
 import { createGoal, deleteGoal as deleteGoalDoc, getGoals, updateGoal as updateGoalDoc } from "../firebase/services/goals";
 import { defaultProfile, ensureProfile, getProfile, updateProfile as updateProfileDoc, updateSettings as updateSettingsDoc } from "../firebase/services/profile";
-import { addTransaction as addTransactionDoc, deleteTransaction as deleteTransactionDoc, getTransactions } from "../firebase/services/transactions";
+import { addTransaction as addTransactionDoc, deleteTransaction as deleteTransactionDoc, getTransactions, updateTransaction as updateTransactionDoc } from "../firebase/services/transactions";
 import { addRecurring as addRecurringDoc, deleteRecurring as deleteRecurringDoc, getRecurring, updateRecurring as updateRecurringDoc } from "../firebase/services/recurring";
 import { addSplit as addSplitDoc, deleteSplit as deleteSplitDoc, getSplits, settleSplit as settleSplitDoc, unsettleSplit as unsettleSplitDoc } from "../firebase/services/splits";
 import { getSummary } from "../firebase/services/summary";
@@ -119,6 +119,7 @@ export function DataProvider({ children }) {
       updateProfile: (updates) => withUser((userId) => updateProfileDoc(userId, updates)),
       updateSettings: (settings) => withUser((userId) => updateSettingsDoc(userId, settings)),
       addTransaction: (txData) => withUser((userId) => addTransactionDoc(userId, txData)),
+      updateTransaction: (txId, updates) => withUser((userId) => updateTransactionDoc(userId, txId, updates)),
       deleteTransaction: (txId) => withUser((userId) => deleteTransactionDoc(userId, txId)),
       addRecurring: (data) => withUser((userId) => addRecurringDoc(userId, data)),
       updateRecurring: (id, data) => withUser((userId) => updateRecurringDoc(userId, id, data)),
