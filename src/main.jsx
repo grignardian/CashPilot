@@ -76,6 +76,15 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`; // DD-MM-YYYY
+  }
+  return dateStr;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -99,6 +108,7 @@ function CashPilotApp() {
     loadingData,
     error: dataError,
     addTransaction,
+    updateTransaction,
     deleteTransaction,
     updateProfile,
     updateSettings,
@@ -1297,7 +1307,8 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
           date: form.date || today()
         });
       }
-    } catch {
+    } catch (err) {
+      console.error("Error saving expense:", err);
       setError("Could not save this expense. Please try again.");
     } finally {
       setSaving(false);
@@ -1366,7 +1377,7 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
   );
 }
 
-function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd, splits, settleSplit, unsettleSplit, deleteSplit }) {
+function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, splits, settleSplit, unsettleSplit, deleteSplit }) {
   const [splitsSpaceOpen, setSplitsSpaceOpen] = useState(false);
 
   const filtered = expenses.filter((item) =>
@@ -1400,7 +1411,7 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onAdd, splits, set
       </div>
       <div className="expense-list full">
         {filtered.map((item) => (
-          <ExpenseRow key={item.id} expense={item} onDelete={onDelete} splits={splits} settleSplit={settleSplit} unsettleSplit={unsettleSplit} />
+          <ExpenseRow key={item.id} expense={item} onDelete={onDelete} onEdit={onEdit} splits={splits} settleSplit={settleSplit} unsettleSplit={unsettleSplit} />
         ))}
       </div>
       {filtered.length === 0 && <p className="empty-state">No matching expense records yet.</p>}
@@ -1535,7 +1546,7 @@ function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unset
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <strong style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{expense.title}</strong>
-          <small style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{expense.category} · {expense.date}{expense.note ? ` · ${expense.note}` : ""}</small>
+          <small style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{expense.category} · {formatDate(expense.date)}{expense.note ? ` · ${expense.note}` : ""}</small>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <b>{currency(expense.amount)}</b>
