@@ -35,8 +35,69 @@ function normalizeCategory(catStr) {
   return "Other";
 }
 
+function getCached(key) {
+  try {
+    const raw = sessionStorage.getItem(`cp_cache_${key}`);
+    if (!raw) return null;
+    const { data, expiry } = JSON.parse(raw);
+    if (Date.now() > expiry) {
+      sessionStorage.removeItem(`cp_cache_${key}`);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function setCache(key, data, ttlMs = 24 * 60 * 60 * 1000) {
+  try {
+    sessionStorage.setItem(`cp_cache_${key}`, JSON.stringify({
+      data,
+      expiry: Date.now() + ttlMs
+    }));
+  } catch { /* ignore storage errors */ }
+}
+
+async function callGemini(prompt) {
+  const apiKey = typeof import.meta !== "undefined" ? import.meta.env?.VITE_GEMINI_API_KEY : undefined;
+  if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY") {
+    throw new Error("Gemini API key not configured");
+  }
+
+  const models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Gemini API request failed");
+}
+
 export function isGeminiConfigured() {
-  return Boolean(import.meta.env.VITE_GEMINI_API_KEY && import.meta.env.VITE_GEMINI_API_KEY !== "YOUR_GEMINI_API_KEY");
+  const apiKey = typeof import.meta !== "undefined" ? import.meta.env?.VITE_GEMINI_API_KEY : undefined;
+  return Boolean(apiKey && apiKey !== "YOUR_GEMINI_API_KEY");
 }
 
 /**

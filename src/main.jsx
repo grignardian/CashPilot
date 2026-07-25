@@ -1367,7 +1367,7 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
           <input
             value={form.title}
             onChange={(event) => setForm({ ...form, title: event.target.value })}
-            placeholder="e.g. Swiggy biryani, Metro recharge, Uber to college..."
+            placeholder=""
           />
           {aiHint && <small style={{ color: "#a98df5", fontSize: "12px", marginTop: "4px", fontWeight: "500" }}>{aiHint}</small>}
         </label>
