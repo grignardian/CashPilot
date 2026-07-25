@@ -517,7 +517,7 @@ function Sidebar({ active, setScreen, totals }) {
   return (
     <aside className="sidebar">
       <div className="brand-mark">
-        <Sparkles size={18} />
+        <img src="/cashpilot-logo.png" alt="CashPilot Logo" className="brand-logo" />
         <span>CashPilot</span>
       </div>
       <nav className="side-nav" aria-label="CashPilot sections">
@@ -547,9 +547,12 @@ function Sidebar({ active, setScreen, totals }) {
 function DesktopHeader({ screen, setScreen, onLogout, unreadCount }) {
   return (
     <header className="desktop-header">
-      <div>
-        <p>Expenses manager</p>
-        <h1>CashPilot</h1>
+      <div className="desktop-header-brand">
+        <img src="/cashpilot-logo.png" alt="CashPilot Logo" className="desktop-brand-logo" />
+        <div>
+          <p>Expenses manager</p>
+          <h1>CashPilot</h1>
+        </div>
       </div>
       <div className="desktop-actions">
         <button className="invite pressable" onClick={() => setScreen("calendar")}>
@@ -590,7 +593,7 @@ function LoadingScreen() {
     <main className="stage auth-stage">
       <section className="auth-card" style={{ textAlign: "center", padding: "48px 28px" }}>
         <div className="brand-mark" style={{ justifyContent: "center" }}>
-          <Sparkles size={22} />
+          <img src="/cashpilot-logo.png" alt="CashPilot Logo" className="brand-logo" style={{ width: "36px", height: "36px" }} />
           <span>CashPilot</span>
         </div>
         <p className="auth-subtitle" style={{ marginTop: "16px" }}>Loading your budget...</p>
@@ -643,7 +646,7 @@ function OnboardingScreen({ profile, updateSettings }) {
     <main className="stage auth-stage">
       <section className="auth-card" style={{ maxWidth: "420px" }}>
         <div className="brand-mark">
-          <Sparkles size={18} />
+          <img src="/cashpilot-logo.png" alt="CashPilot Logo" className="brand-logo" />
           <span>CashPilot</span>
         </div>
         <h1 style={{ fontSize: "24px", marginTop: "12px" }}>Welcome, {name}!</h1>
@@ -723,7 +726,7 @@ function AuthScreen({ authError, onSignIn, onSignUp, onGoogle }) {
     <main className="stage auth-stage">
       <section className="auth-card">
         <div className="brand-mark">
-          <Sparkles size={18} />
+          <img src="/cashpilot-logo.png" alt="CashPilot Logo" className="brand-logo" />
           <span>CashPilot</span>
         </div>
         <h1>{mode === "signup" ? "Create your own wallet" : "Welcome back"}</h1>
@@ -2609,7 +2612,7 @@ function InstallPrompt() {
           <X size={14} />
         </button>
         <div className="install-prompt-icon">
-          <Sparkles size={20} />
+          <img src="/cashpilot-logo.png" alt="CashPilot Logo" style={{ width: "24px", height: "24px", borderRadius: "6px", objectFit: "cover" }} />
         </div>
         <div className="install-prompt-text">
           <strong>Install CashPilot</strong>
@@ -2659,7 +2662,7 @@ function BudgetResetModal({ allowance, savingsGoal, prevLeftover, onSave }) {
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Configure New Month Budget">
       <section className="modal-card" style={{ maxWidth: "420px" }}>
         <div className="modal-icon">
-          <Sparkles size={22} />
+          <img src="/cashpilot-logo.png" alt="CashPilot Logo" style={{ width: "36px", height: "36px", borderRadius: "10px", objectFit: "cover" }} />
         </div>
         <h2 style={{ fontSize: "20px", marginTop: "12px", textAlign: "center" }}>
           Configure Budget for {cycleName}

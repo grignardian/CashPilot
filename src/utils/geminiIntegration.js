@@ -35,6 +35,10 @@ function normalizeCategory(catStr) {
   return "Other";
 }
 
+export function isGeminiConfigured() {
+  return Boolean(import.meta.env.VITE_GEMINI_API_KEY && import.meta.env.VITE_GEMINI_API_KEY !== "YOUR_GEMINI_API_KEY");
+}
+
 /**
  * Suggest category and refined name for an expense.
  * @param {string} userInput - Raw expense name (e.g. "maggi at canteen")
