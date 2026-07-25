@@ -1,97 +1,38 @@
-/**
- * Gemini AI Integration
- * Category suggestions, spending advice, and monthly forecasts.
- */
-
-const CACHE_KEY = "cashpilot-gemini-cache";
-const RATE_LIMIT_KEY = "cashpilot-gemini-rate";
-const MAX_CALLS_PER_MINUTE = 5;
-
-/**
- * Get the Gemini API key from environment.
- */
-function getApiKey() {
-  return import.meta.env.VITE_GEMINI_API_KEY || "";
-}
+export const VALID_CATEGORIES = [
+  "Food",
+  "Transport",
+  "Groceries",
+  "Shopping",
+  "Bills & Rent",
+  "Subscriptions",
+  "Academics",
+  "Health",
+  "Gifts",
+  "Hangout",
+  "Other"
+];
 
 /**
- * Check if Gemini is configured.
+ * Normalize AI or user category string to valid CashPilot category.
  */
-export function isGeminiConfigured() {
-  return Boolean(getApiKey());
-}
+function normalizeCategory(catStr) {
+  if (!catStr) return "Other";
+  const clean = catStr.trim();
+  if (VALID_CATEGORIES.includes(clean)) return clean;
 
-/**
- * Rate limiter — max 5 calls per minute.
- */
-function checkRateLimit() {
-  try {
-    const data = JSON.parse(localStorage.getItem(RATE_LIMIT_KEY) || "{}");
-    const now = Date.now();
-    const calls = (data.calls || []).filter((t) => now - t < 60000);
-    if (calls.length >= MAX_CALLS_PER_MINUTE) return false;
-    calls.push(now);
-    localStorage.setItem(RATE_LIMIT_KEY, JSON.stringify({ calls }));
-    return true;
-  } catch {
-    return true;
-  }
-}
+  const lower = clean.toLowerCase();
+  if (lower.includes("food") || lower.includes("eat") || lower.includes("din") || lower.includes("meal") || lower.includes("snack") || lower.includes("canteen")) return "Food";
+  if (lower.includes("trans") || lower.includes("travel") || lower.includes("commute") || lower.includes("cab") || lower.includes("ride")) return "Transport";
+  if (lower.includes("groc") || lower.includes("supermarket") || lower.includes("market") || lower.includes("store")) return "Groceries";
+  if (lower.includes("shop") || lower.includes("cloth") || lower.includes("wear") || lower.includes("buy")) return "Shopping";
+  if (lower.includes("bill") || lower.includes("rent") || lower.includes("electric") || lower.includes("utility") || lower.includes("power")) return "Bills & Rent";
+  if (lower.includes("subscr") || lower.includes("ott") || lower.includes("stream") || lower.includes("membership")) return "Subscriptions";
+  if (lower.includes("academic") || lower.includes("book") || lower.includes("study") || lower.includes("school") || lower.includes("college") || lower.includes("exam") || lower.includes("tuition")) return "Academics";
+  if (lower.includes("health") || lower.includes("med") || lower.includes("pharm") || lower.includes("doc") || lower.includes("gym") || lower.includes("fit")) return "Health";
+  if (lower.includes("gift") || lower.includes("present") || lower.includes("donat") || lower.includes("treat")) return "Gifts";
+  if (lower.includes("hangout") || lower.includes("fun") || lower.includes("movie") || lower.includes("party") || lower.includes("game") || lower.includes("trip") || lower.includes("leisure")) return "Hangout";
 
-/**
- * Get/set cache entries.
- */
-function getCache() {
-  try {
-    return JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function setCache(key, value, ttlMs) {
-  const cache = getCache();
-  cache[key] = { value, expiresAt: Date.now() + ttlMs };
-  localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-}
-
-function getCached(key) {
-  const cache = getCache();
-  const entry = cache[key];
-  if (entry && entry.expiresAt > Date.now()) return entry.value;
-  return null;
-}
-
-/**
- * Call Gemini API.
- */
-async function callGemini(prompt) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("Gemini API key not configured");
-  if (!checkRateLimit()) throw new Error("Rate limit exceeded");
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 256
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  return text.trim();
+  return "Other";
 }
 
 /**
@@ -100,31 +41,45 @@ async function callGemini(prompt) {
  * @returns {object} { suggestedName, suggestedCategory, confidence }
  */
 export async function suggestCategoryAndName(userInput) {
-  if (!userInput || userInput.length < 3) return null;
-  if (!isGeminiConfigured()) return fallbackCategorySuggestion(userInput);
+  if (!userInput || userInput.trim().length < 2) return null;
+  const cleanInput = userInput.trim();
 
-  const cacheKey = `cat_${userInput.toLowerCase().trim()}`;
+  const cacheKey = `cat_${cleanInput.toLowerCase()}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
+  if (!isGeminiConfigured()) return fallbackCategorySuggestion(cleanInput);
+
   try {
-    const prompt = `Categorize this student expense and refine the name. Input: "${userInput}". 
-Return ONLY valid JSON (no markdown, no code blocks): {"suggestedName": "string", "suggestedCategory": "Food|Transport|Books|Hangout|Other", "confidence": 0.0-1.0}
-Categories: Food (meals, snacks, drinks), Transport (auto, bus, metro, fuel), Books (study materials, stationery, subscriptions), Hangout (movies, games, outings), Other (everything else).`;
+    const prompt = `Categorize this Indian college student expense and refine the name. Input: "${cleanInput}". 
+Return ONLY valid JSON (no markdown, no code blocks): {"suggestedName": "string", "suggestedCategory": "Food|Transport|Groceries|Shopping|Bills & Rent|Subscriptions|Academics|Health|Gifts|Hangout|Other", "confidence": 0.0-1.0}
+
+Category definitions:
+- Food: Canteen, Swiggy, Zomato, meals, snacks, tea, chai, coffee, drinks, restaurants.
+- Transport: Auto, Uber, Ola, Rapido, bus, metro, train, cab, petrol, fuel, parking, ticket.
+- Groceries: Blinkit, Zepto, Instamart, supermarket, milk, veggies, fruits, eggs, bread, daily essentials.
+- Shopping: Amazon, Flipkart, Myntra, Meesho, clothes, shoes, electronics, accessories, gadget.
+- Bills & Rent: Room/flat rent, electricity, Wi-Fi/broadband, water, gas cylinder, maintenance bill.
+- Subscriptions: Netflix, Spotify, Hotstar, Prime, YouTube Premium, Apple, ChatGPT, software sub.
+- Academics: Xerox, printing, notebooks, pens, textbooks, study materials, exam fees, tuition, courses.
+- Health: Medicines, pharmacy, doctor fee, hospital, lab tests, gym, protein, healthcare.
+- Gifts: Birthday gift, treat for friends, presents, festival gifts, flowers.
+- Hangout: Movies, cinema, gaming, bowling, arcade, outings, trips, party, clubs, events.
+- Other: Misc expense not fitting above.`;
 
     const result = await callGemini(prompt);
     const parsed = JSON.parse(result.replace(/```json\n?|\n?```/g, "").trim());
 
     const suggestion = {
-      suggestedName: parsed.suggestedName || userInput,
-      suggestedCategory: parsed.suggestedCategory || "Other",
-      confidence: Number(parsed.confidence) || 0.5
+      suggestedName: parsed.suggestedName || cleanInput,
+      suggestedCategory: normalizeCategory(parsed.suggestedCategory),
+      confidence: Number(parsed.confidence) || 0.85
     };
 
     setCache(cacheKey, suggestion, 7 * 24 * 60 * 60 * 1000); // 7 day cache
     return suggestion;
   } catch {
-    return fallbackCategorySuggestion(userInput);
+    return fallbackCategorySuggestion(cleanInput);
   }
 }
 
@@ -197,20 +152,35 @@ export async function generateMonthlyForecast(data) {
 
 // --- Fallback logic (no API required) ---
 
-function fallbackCategorySuggestion(input) {
-  const lower = input.toLowerCase();
-  const foodWords = ["maggi", "dosa", "chai", "tea", "coffee", "lunch", "dinner", "breakfast", "snack", "biryani", "pizza", "burger", "thali", "mess", "canteen", "juice", "water", "milk", "egg", "bread", "rice", "noodles", "momos", "samosa", "pani puri"];
-  const transportWords = ["auto", "uber", "ola", "bus", "metro", "train", "cab", "petrol", "fuel", "rick", "rickshaw", "ticket"];
-  const bookWords = ["book", "notebook", "pen", "stationery", "xerox", "print", "copy", "study", "course", "subscription", "udemy", "coursera"];
-  const hangoutWords = ["movie", "film", "game", "outing", "trip", "party", "club", "bowling", "arcade", "concert", "event", "netflix", "spotify", "hotstar", "prime"];
+export function fallbackCategorySuggestion(input) {
+  if (!input) return { suggestedName: "", suggestedCategory: "Other", confidence: 0.5 };
+  const lower = input.toLowerCase().trim();
+
+  const groceryWords = ["blinkit", "zepto", "instamart", "grocery", "groceries", "supermarket", "dmart", "d-mart", "bigbasket", "vegetables", "veggies", "fruits", "curd", "paneer", "ration"];
+  const billsWords = ["house rent", "room rent", "flat rent", "pg rent", "rent ", "electricity", "power bill", "wifi", "broadband", "recharge", "airtel bill", "jio bill", "vi bill", "water bill", "gas cylinder", "maintenance bill"];
+  const subWords = ["netflix", "spotify", "hotstar", "prime video", "youtube premium", "apple music", "icloud", "chatgpt", "github sub", "subscription"];
+  const academicWords = ["xerox", "photocopy", "notebook", "stationery", "textbook", "study material", "course", "udemy", "coursera", "exam fee", "college fee", "tuition", "lab fee", "assignment", "project printout", "pen ", "pens", "pencil"];
+  const healthWords = ["doctor", "pharmacy", "medicine", "meds", "hospital", "clinic", "syrup", "tablets", "pills", "lab test", "gym fee", "protein", "whey", "dentist", "medical", "bandage", "crocin", "paracetamol"];
+  const giftWords = ["gift", "birthday gift", "treat for friends", "present", "flowers", "rakhi", "anniversary gift", "farewell gift"];
+  const hangoutWords = ["movie", "film", "cinema", "imax", "pvr", "inox", "gaming", "ps5", "bowling", "arcade", "outing", "trip", "party", "club", "concert", "event", "standup", "pub", "bar"];
+  const transportWords = ["auto", "uber", "ola", "rapido", "bus", "metro", "train", "cab", "petrol", "diesel", "fuel", "rickshaw", "bus ticket", "metro pass", "train ticket", "parking", "toll", "fastag", "scooty", "bike refill"];
+  const shoppingWords = ["amazon", "flipkart", "myntra", "meesho", "ajio", "zara", "h&m", "clothes", "shirt", "tshirt", "t-shirt", "jeans", "pants", "shoes", "sneakers", "jacket", "hoodie", "electronics", "headphones", "earbuds", "earphones", "charger", "cable", "case", "cover"];
+  const foodWords = ["swiggy", "zomato", "maggi", "dosa", "chai", "tea", "coffee", "lunch", "dinner", "breakfast", "snack", "biryani", "pizza", "burger", "thali", "mess", "canteen", "juice", "water", "milkshake", "egg", "bread", "rice", "noodles", "momos", "samosa", "pani puri", "food", "cafe", "restaurant", "dhaba", "shawarma", "kathi roll", "pastry", "cake", "ice cream", "subway", "dominos", "kfc", "mcdonalds"];
 
   let category = "Other";
-  let confidence = 0.6;
+  let confidence = 0.85;
 
-  if (foodWords.some((w) => lower.includes(w))) { category = "Food"; confidence = 0.85; }
-  else if (transportWords.some((w) => lower.includes(w))) { category = "Transport"; confidence = 0.85; }
-  else if (bookWords.some((w) => lower.includes(w))) { category = "Books"; confidence = 0.8; }
-  else if (hangoutWords.some((w) => lower.includes(w))) { category = "Hangout"; confidence = 0.8; }
+  if (groceryWords.some((w) => lower.includes(w))) { category = "Groceries"; }
+  else if (billsWords.some((w) => lower.includes(w))) { category = "Bills & Rent"; }
+  else if (subWords.some((w) => lower.includes(w))) { category = "Subscriptions"; }
+  else if (academicWords.some((w) => lower.includes(w))) { category = "Academics"; }
+  else if (healthWords.some((w) => lower.includes(w))) { category = "Health"; }
+  else if (giftWords.some((w) => lower.includes(w))) { category = "Gifts"; }
+  else if (hangoutWords.some((w) => lower.includes(w))) { category = "Hangout"; }
+  else if (transportWords.some((w) => lower.includes(w))) { category = "Transport"; }
+  else if (shoppingWords.some((w) => lower.includes(w))) { category = "Shopping"; }
+  else if (foodWords.some((w) => lower.includes(w))) { category = "Food"; }
+  else { confidence = 0.7; }
 
   return { suggestedName: input, suggestedCategory: category, confidence };
 }
@@ -243,3 +213,4 @@ function fallbackForecast(data) {
     onTrack
   };
 }
+

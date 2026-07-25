@@ -4,8 +4,7 @@
  */
 
 import { getMonthContext } from "./budgetCalculations";
-
-const CATEGORIES = ["Food", "Transport", "Books", "Hangout", "Other"];
+import { VALID_CATEGORIES as CATEGORIES } from "./geminiIntegration";
 
 /**
  * Generate category breakdown for a given set of expenses.

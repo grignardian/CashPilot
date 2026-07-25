@@ -1269,17 +1269,37 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [aiHint, setAiHint] = useState("");
+  const [manuallySelected, setManuallySelected] = useState(Boolean(editingExpense?.category));
 
-  const handleTitleBlur = async () => {
-    if (form.title.trim().length < 3) return;
-    try {
-      const suggestion = await suggestCategoryAndName(form.title.trim());
-      if (suggestion && suggestion.confidence >= 0.7) {
-        setForm((prev) => ({ ...prev, category: suggestion.suggestedCategory }));
-        setAiHint(`AI suggested: ${suggestion.suggestedCategory}`);
-        setTimeout(() => setAiHint(""), 3000);
-      }
-    } catch { /* ignore AI errors */ }
+  // Auto-categorize as title changes (debounced)
+  useEffect(() => {
+    if (manuallySelected) return;
+    const titleText = form.title.trim();
+    if (titleText.length < 2) {
+      if (!editingExpense && !form.category) setForm((prev) => ({ ...prev, category: "" }));
+      setAiHint("");
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const suggestion = await suggestCategoryAndName(titleText);
+        if (suggestion && suggestion.suggestedCategory && suggestion.confidence >= 0.65) {
+          const isValidCategory = categories.some((c) => c.name === suggestion.suggestedCategory);
+          const targetCategory = isValidCategory ? suggestion.suggestedCategory : "Other";
+          setForm((prev) => ({ ...prev, category: targetCategory }));
+          setAiHint(`✨ Auto-categorized as: ${targetCategory}`);
+        }
+      } catch { /* ignore AI errors */ }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [form.title, manuallySelected, editingExpense]);
+
+  const handleCategoryChange = (val) => {
+    setManuallySelected(true);
+    setForm((prev) => ({ ...prev, category: val }));
+    setAiHint("");
   };
 
   const submit = async (event) => {
@@ -1291,19 +1311,29 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
     }
     setSaving(true);
     setError("");
+
+    // Final fallback for category if none selected
+    let finalCategory = form.category;
+    if (!finalCategory) {
+      const suggestion = await suggestCategoryAndName(form.title.trim());
+      finalCategory = (suggestion && categories.some((c) => c.name === suggestion.suggestedCategory))
+        ? suggestion.suggestedCategory
+        : "Other";
+    }
+
     try {
       if (editingExpense) {
         await onUpdate(editingExpense.id, {
           ...form,
           amount,
-          category: form.category || "Other",
+          category: finalCategory,
           date: form.date || today()
         });
       } else {
         await onAdd({
           ...form,
           amount,
-          category: form.category || "Other",
+          category: finalCategory,
           date: form.date || today()
         });
       }
@@ -1334,8 +1364,12 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
       <form className="expense-form" onSubmit={submit}>
         <label>
           <span>Expense name</span>
-          <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} onBlur={handleTitleBlur} placeholder="" />
-          {aiHint && <small style={{ color: "#c8f0c0", fontSize: "11px", marginTop: "4px" }}>{aiHint}</small>}
+          <input
+            value={form.title}
+            onChange={(event) => setForm({ ...form, title: event.target.value })}
+            placeholder="e.g. Swiggy biryani, Metro recharge, Uber to college..."
+          />
+          {aiHint && <small style={{ color: "#a98df5", fontSize: "12px", marginTop: "4px", fontWeight: "500" }}>{aiHint}</small>}
         </label>
         <label>
           <span>Amount in rupees</span>
@@ -1346,7 +1380,7 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
           <CustomDropdown
             value={form.category}
             options={categories}
-            onChange={(val) => setForm({ ...form, category: val })}
+            onChange={handleCategoryChange}
           />
         </label>
         <label>
