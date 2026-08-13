@@ -280,12 +280,20 @@ function CashPilotApp() {
       return map;
     }, {});
 
+    const allByDate = expenses.reduce((map, item) => {
+      if (item.type === "expense") {
+        map[item.date] = (map[item.date] || 0) + Number(item.amount || 0);
+      }
+      return map;
+    }, {});
+
     return {
       spent,
       left,
       todaySpent,
       byCategory,
       byDate,
+      allByDate,
       dailyLimit: budgetMetrics.safeDaily,
       savingsProgress: settings.savingsGoal > 0
         ? Math.min(100, Math.max(0, ((left > 0 ? left : 0) / settings.savingsGoal) * 100))
@@ -2190,38 +2198,52 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
   );
 }
 
-function CalendarGraphs({ totals, expenses }) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
+function CalendarGraphs({ totals, expenses, viewMonth }) {
+  const parseTarget = viewMonth ? new Date(`${viewMonth}-01T00:00:00`) : new Date();
+  const year = parseTarget.getFullYear();
+  const month = parseTarget.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Daily spending bar chart data
+  const allByDate = totals.allByDate || totals.byDate || {};
+
+  // Daily spending bar chart data for viewed month
   const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1;
     const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return totals.byDate[dateKey] || 0;
+    return allByDate[dateKey] || 0;
   });
   const maxDaily = Math.max(...dailyData, 1);
 
-  // Category donut data
-  const catData = totals.byCategory.filter((c) => c.total > 0);
+  // Category split for viewed month
+  const viewedMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const viewedMonthExpenses = expenses.filter(
+    (exp) => exp.type === "expense" && exp.date && exp.date.startsWith(viewedMonthPrefix)
+  );
+
+  const catData = categories.map((cat) => ({
+    ...cat,
+    total: viewedMonthExpenses
+      .filter((item) => item.category === cat.name)
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  })).filter((c) => c.total > 0);
+
   const catTotal = catData.reduce((sum, c) => sum + c.total, 0);
 
-  // Weekly trend (last 4 weeks)
+  // Weekly trend for viewed month (divided into 4 weeks)
   const weeklyData = [];
-  for (let i = 3; i >= 0; i--) {
-    const weekEnd = new Date(now);
-    weekEnd.setDate(weekEnd.getDate() - (i * 7));
-    const weekStart = new Date(weekEnd);
-    weekStart.setDate(weekStart.getDate() - 6);
+  for (let w = 1; w <= 4; w++) {
+    const wStartDay = (w - 1) * 7 + 1;
+    const wEndDay = w === 4 ? daysInMonth : w * 7;
+    const startDateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(wStartDay).padStart(2, "0")}`;
+    const endDateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(wEndDay).padStart(2, "0")}`;
+
     let weekTotal = 0;
     expenses.forEach((exp) => {
-      if (exp.type === "expense" && exp.date >= weekStart.toISOString().slice(0, 10) && exp.date <= weekEnd.toISOString().slice(0, 10)) {
+      if (exp.type === "expense" && exp.date >= startDateStr && exp.date <= endDateStr) {
         weekTotal += Number(exp.amount || 0);
       }
     });
-    weeklyData.push({ label: `W${4 - i}`, total: weekTotal });
+    weeklyData.push({ label: `W${w}`, total: weekTotal });
   }
   const maxWeekly = Math.max(...weeklyData.map((w) => w.total), 1);
 
@@ -2230,7 +2252,7 @@ function CalendarGraphs({ totals, expenses }) {
       <section className="student-panel" style={{ marginTop: "20px" }}>
         <div className="panel-heading">
           <h2>Daily spending</h2>
-          <span>This month</span>
+          <span>{parseTarget.toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span>
         </div>
         <div className="bar-chart">
           {dailyData.map((val, i) => (
@@ -2245,7 +2267,7 @@ function CalendarGraphs({ totals, expenses }) {
       <section className="student-panel" style={{ marginTop: "14px" }}>
         <div className="panel-heading">
           <h2>Weekly trend</h2>
-          <span>Last 4 weeks</span>
+          <span>{parseTarget.toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span>
         </div>
         <div className="weekly-chart">
           {weeklyData.map((week, i) => (
@@ -2305,6 +2327,8 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
     ...Array.from({ length: daysInMonth }, (_, index) => index + 1)
   ];
 
+  const allByDate = totals.allByDate || totals.byDate || {};
+
   const prevMonth = () => {
     const d = new Date(year, month - 1, 1);
     setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
@@ -2324,7 +2348,7 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
   };
 
   const selectedExpenses = selectedDate ? expenses.filter((item) => item.date === selectedDate) : [];
-  const selectedTotal = selectedDate ? (totals.byDate[selectedDate] || 0) : 0;
+  const selectedTotal = selectedDate ? (allByDate[selectedDate] || 0) : 0;
   const selectedLabel = selectedDate
     ? new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     : "";
@@ -2351,7 +2375,7 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
           {cells.map((day, index) => {
             if (!day) return <span className="calendar-cell empty" key={`empty-${index}`} />;
             const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-            const amount = totals.byDate[dateKey] || 0;
+            const amount = allByDate[dateKey] || 0;
             const tier = getTierForAmount(amount);
             const intensity = tier.alpha;
             return (
@@ -2369,7 +2393,7 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
         </div>
       </section>
 
-      <CalendarGraphs totals={totals} expenses={expenses} />
+      <CalendarGraphs totals={totals} expenses={expenses} viewMonth={viewMonth} />
 
       {selectedDate && createPortal(
         <div className={`modal-backdrop ${closing ? "calendar-closing" : ""}`} onMouseDown={closePopup}>
