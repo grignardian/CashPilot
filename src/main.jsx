@@ -34,7 +34,8 @@ import {
   HeartPulse,
   Gift,
   Tags,
-  Pencil
+  Pencil,
+  GripVertical
 } from "lucide-react";
 import { AuthProvider } from "./context/AuthContext";
 import { DataProvider } from "./context/DataContext";
@@ -1414,9 +1415,165 @@ function AddExpenseScreen({ onAdd, onUpdate, editingExpense, preselectedDate, on
 function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, splits, settleSplit, unsettleSplit, deleteSplit }) {
   const [splitsSpaceOpen, setSplitsSpaceOpen] = useState(false);
 
-  const filtered = expenses.filter((item) =>
+  // Custom expense ordering stored in localStorage
+  const [customOrder, setCustomOrder] = useState(() => {
+    try {
+      const saved = localStorage.getItem("cashpilot-expense-order");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Drag state
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [isLongPressing, setIsLongPressing] = useState(false);
+
+  const longPressTimerRef = React.useRef(null);
+  const startPosRef = React.useRef({ x: 0, y: 0 });
+  const listRef = React.useRef(null);
+
+  // Apply custom order to expenses
+  const orderedExpenses = useMemo(() => {
+    if (!customOrder || customOrder.length === 0) return expenses;
+
+    const orderMap = new Map();
+    customOrder.forEach((id, idx) => {
+      orderMap.set(id, idx);
+    });
+
+    return [...expenses].sort((a, b) => {
+      const hasA = orderMap.has(a.id);
+      const hasB = orderMap.has(b.id);
+      if (hasA && hasB) {
+        return orderMap.get(a.id) - orderMap.get(b.id);
+      }
+      if (!hasA && hasB) return -1;
+      if (hasA && !hasB) return 1;
+      return 0;
+    });
+  }, [expenses, customOrder]);
+
+  const filtered = orderedExpenses.filter((item) =>
     `${item.title} ${item.category} ${item.note}`.toLowerCase().includes(query.toLowerCase())
   );
+
+  // Pointer down (start long-press or direct grip drag)
+  const handleItemPointerDown = (e, index, immediate = false) => {
+    if (e.target.closest("button") || e.target.closest("a") || e.target.closest("input")) {
+      return;
+    }
+
+    const startX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+    const startY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+    startPosRef.current = { x: startX, y: startY };
+
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+
+    if (immediate) {
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try { navigator.vibrate(30); } catch (_) {}
+      }
+      setDraggedIndex(index);
+      setDragOverIndex(index);
+      setIsLongPressing(true);
+      return;
+    }
+
+    longPressTimerRef.current = setTimeout(() => {
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (_) {}
+      }
+      setDraggedIndex(index);
+      setDragOverIndex(index);
+      setIsLongPressing(true);
+    }, 320);
+  };
+
+  // Window listeners during drag / long-press check
+  useEffect(() => {
+    const handleMove = (e) => {
+      const currentX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+      const currentY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+
+      // Pending long press: cancel if moved beyond threshold
+      if (draggedIndex === null && longPressTimerRef.current) {
+        const dx = Math.abs(currentX - startPosRef.current.x);
+        const dy = Math.abs(currentY - startPosRef.current.y);
+        if (dx > 8 || dy > 8) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+        return;
+      }
+
+      // Dragging active
+      if (draggedIndex !== null) {
+        if (e.cancelable) e.preventDefault();
+
+        if (listRef.current) {
+          const rows = Array.from(listRef.current.children);
+          for (let i = 0; i < rows.length; i++) {
+            const rect = rows[i].getBoundingClientRect();
+            if (currentY >= rect.top && currentY <= rect.bottom) {
+              if (i !== dragOverIndex) {
+                setDragOverIndex(i);
+              }
+              break;
+            }
+          }
+        }
+      }
+    };
+
+    const handleUp = () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+
+      if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+        const updatedList = [...filtered];
+        const [moved] = updatedList.splice(draggedIndex, 1);
+        updatedList.splice(dragOverIndex, 0, moved);
+
+        const newOrderIds = updatedList.map((item) => item.id);
+        const otherIds = customOrder.filter((id) => !newOrderIds.includes(id));
+        const finalIds = [...newOrderIds, ...otherIds];
+
+        setCustomOrder(finalIds);
+        try {
+          localStorage.setItem("cashpilot-expense-order", JSON.stringify(finalIds));
+        } catch (_) {}
+      }
+
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      setIsLongPressing(false);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+    window.addEventListener("touchmove", handleMove, { passive: false });
+    window.addEventListener("touchend", handleUp);
+    window.addEventListener("touchcancel", handleUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+      window.removeEventListener("touchmove", handleMove);
+      window.removeEventListener("touchend", handleUp);
+      window.removeEventListener("touchcancel", handleUp);
+    };
+  }, [draggedIndex, dragOverIndex, filtered, customOrder]);
+
+  const handleResetOrder = () => {
+    setCustomOrder([]);
+    localStorage.removeItem("cashpilot-expense-order");
+  };
 
   const pendingSplitsAmount = (splits || [])
     .filter(s => s.status === "pending")
@@ -1436,16 +1593,39 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
         <Search size={18} />
         <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
-      <div className="record-toolbar">
-        <span>{filtered.length} records</span>
+      <div className="record-toolbar" style={{ flexWrap: "wrap", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>{filtered.length} records</span>
+          <span className="reorder-hint-badge" title="Long press any record or hold grip to move up/down">
+            <GripVertical size={13} /> Hold & drag to reorder
+          </span>
+          {customOrder.length > 0 && (
+            <button className="reset-order-btn pressable" onClick={handleResetOrder}>
+              Reset order
+            </button>
+          )}
+        </div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button className="dark-pill pressable" style={{ background: "rgba(169, 141, 245, 0.08)", border: "1px solid rgba(169, 141, 245, 0.2)", color: "var(--accent-light)" }} onClick={() => setSplitsSpaceOpen(true)}>Split records</button>
           <button className="dark-pill pressable" onClick={onAdd}>Add new</button>
         </div>
       </div>
-      <div className="expense-list full">
-        {filtered.map((item) => (
-          <ExpenseRow key={item.id} expense={item} onDelete={onDelete} onEdit={onEdit} splits={splits} settleSplit={settleSplit} unsettleSplit={unsettleSplit} />
+      <div className="expense-list full" ref={listRef}>
+        {filtered.map((item, index) => (
+          <ExpenseRow
+            key={item.id}
+            expense={item}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            splits={splits}
+            settleSplit={settleSplit}
+            unsettleSplit={unsettleSplit}
+            showGrip={true}
+            isDragging={draggedIndex === index}
+            isDragOver={dragOverIndex === index && draggedIndex !== index}
+            onPointerDown={(e) => handleItemPointerDown(e, index, false)}
+            onGripPointerDown={(e) => handleItemPointerDown(e, index, true)}
+          />
         ))}
       </div>
       {filtered.length === 0 && <p className="empty-state">No matching expense records yet.</p>}
@@ -1558,7 +1738,7 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
   );
 }
 
-function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unsettleSplit }) {
+function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unsettleSplit, showGrip = false, isDragging = false, isDragOver = false, onPointerDown, onGripPointerDown }) {
   const category = categories.find((item) => item.name === expense.category) || categories.at(-1);
   const Icon = category.icon;
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -1574,7 +1754,22 @@ function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unset
 
   return (
     <>
-      <article className="expense-row">
+      <article
+        className={`expense-row ${showGrip ? "has-grip" : ""} ${isDragging ? "is-dragging" : ""} ${isDragOver ? "is-drag-over" : ""}`}
+        onPointerDown={onPointerDown}
+      >
+        {showGrip && (
+          <span
+            className="drag-handle"
+            title="Hold and drag to reorder"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onGripPointerDown && onGripPointerDown(e);
+            }}
+          >
+            <GripVertical size={16} />
+          </span>
+        )}
         <span className="category-icon" style={{ background: category.color }}>
           <Icon size={17} />
         </span>

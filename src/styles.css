@@ -625,10 +625,84 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .expense-row {
   grid-template-columns: 36px minmax(0, 1fr) auto;
   padding: 14px 0;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  position: relative;
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms ease, background-color 180ms ease, opacity 180ms ease;
+}
+
+.expense-row.has-grip {
+  grid-template-columns: 20px 36px minmax(0, 1fr) auto;
 }
 
 .expense-list.full .expense-row {
   padding: 16px 18px;
+}
+
+.expense-list.full .expense-row.has-grip {
+  padding: 14px 14px 14px 10px;
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  opacity: 0.45;
+  cursor: grab;
+  padding: 4px 0;
+  transition: opacity 150ms ease, color 150ms ease;
+}
+
+.drag-handle:hover,
+.expense-row:hover .drag-handle {
+  opacity: 0.9;
+  color: var(--accent-light);
+}
+
+.expense-row.is-dragging {
+  cursor: grabbing;
+  z-index: 10;
+  opacity: 0.95;
+  background: var(--surface-raised, #1e1e24) !important;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px rgba(169, 141, 245, 0.3), 0 0 0 2px var(--accent-light);
+  transform: scale(1.02);
+}
+
+.expense-row.is-drag-over {
+  border-top: 2px solid var(--accent-light) !important;
+  background: rgba(169, 141, 245, 0.08) !important;
+}
+
+.reorder-hint-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-light);
+  background: rgba(169, 141, 245, 0.08);
+  border: 1px solid rgba(169, 141, 245, 0.2);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.reset-order-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.reset-order-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
 }
 
 .expense-row small {
