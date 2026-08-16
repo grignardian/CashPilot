@@ -3,7 +3,9 @@ import { db } from "../config";
 
 const defaultSettings = {
   allowance: 0,
-  savingsGoal: 0
+  savingsGoal: 0,
+  useBudget: true,
+  hasOnboarded: false
 };
 
 export const defaultProfile = {
@@ -52,7 +54,30 @@ export function getProfile(userId, next, error) {
   return onSnapshot(
     profileRef(userId),
     (snapshot) => {
-      next(snapshot.exists() ? { ...defaultProfile, ...snapshot.data(), settings: { ...defaultSettings, ...snapshot.data().settings } } : defaultProfile);
+      if (!snapshot.exists()) {
+        next(defaultProfile);
+        return;
+      }
+      const data = snapshot.data();
+      const rawSettings = data.settings || {};
+      const hasOnboarded = rawSettings.hasOnboarded !== undefined
+        ? Boolean(rawSettings.hasOnboarded)
+        : Boolean(rawSettings.allowance > 0 || rawSettings.useBudget === false);
+
+      const useBudget = rawSettings.useBudget !== undefined
+        ? Boolean(rawSettings.useBudget)
+        : (rawSettings.allowance > 0 || !hasOnboarded);
+
+      next({
+        ...defaultProfile,
+        ...data,
+        settings: {
+          ...defaultSettings,
+          ...rawSettings,
+          useBudget,
+          hasOnboarded
+        }
+      });
     },
     error
   );

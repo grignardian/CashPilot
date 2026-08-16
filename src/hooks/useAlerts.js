@@ -28,7 +28,11 @@ export function useAlerts(transactions, settings) {
 
   // Re-evaluate alerts when metrics change
   useEffect(() => {
-    const { allowance = 0, savingsGoal = 0 } = settings || {};
+    const { allowance = 0, savingsGoal = 0, useBudget = true } = settings || {};
+    if (!useBudget) {
+      setActiveAlerts([]);
+      return;
+    }
     const available = allowance - savingsGoal;
 
     // Generate new alerts if thresholds are breached

@@ -140,6 +140,8 @@ function CashPilotApp() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [prevCycleLeftover, setPrevCycleLeftover] = useState(0);
   const settings = profile.settings;
+  const useBudget = settings?.useBudget !== false;
+  const hasOnboarded = Boolean(settings?.hasOnboarded || settings?.allowance > 0 || settings?.useBudget === false);
 
   // Utility hooks integration
   const budgetMetrics = useBudgetMetrics(transactions, settings);
@@ -156,19 +158,19 @@ function CashPilotApp() {
 
   // Onboarding completion check: Auto-mark current cycle configured if no keys exist
   useEffect(() => {
-    if (settings && settings.allowance > 0) {
+    if (useBudget && settings && settings.allowance > 0) {
       const currentCycleKey = budgetMetrics.context.monthKey;
       const keys = Object.keys(localStorage).filter(k => k.startsWith("cashpilot-budget-configured-"));
       if (keys.length === 0) {
         localStorage.setItem(`cashpilot-budget-configured-${currentCycleKey}`, "true");
       }
     }
-  }, [settings?.allowance, budgetMetrics.context.monthKey]);
+  }, [useBudget, settings?.allowance, budgetMetrics.context.monthKey]);
 
   // Budget cycle auto-reset/rollover check starting on 7th
   useEffect(() => {
-    // Only check if user is logged in, data sync is finished, and onboarding is complete
-    if (loadingData || !user || !settings || settings.allowance === 0) return;
+    // Only check if user is logged in, data sync is finished, budget mode is active, and onboarding is complete
+    if (!useBudget || loadingData || !user || !settings || settings.allowance === 0) return;
 
     const currentCycleKey = budgetMetrics.context.monthKey;
     const isConfigured = localStorage.getItem(`cashpilot-budget-configured-${currentCycleKey}`) === "true";
@@ -361,8 +363,8 @@ function CashPilotApp() {
     );
   }
 
-  // New user: data loaded but budget never configured
-  if (!loadingData && settings.allowance === 0) {
+  // New user: data loaded but budget onboarding never completed
+  if (!loadingData && !hasOnboarded) {
     return (
       <OnboardingScreen
         profile={profile}
@@ -375,7 +377,7 @@ function CashPilotApp() {
     <main className="stage">
       <section className="app-shell" aria-label="CashPilot budget planner">
         <StatusBar />
-        <Sidebar active={screen} setScreen={handleSetScreen} totals={totals} />
+        <Sidebar active={screen} setScreen={handleSetScreen} totals={totals} useBudget={useBudget} />
         <div className="screen">
           <DesktopHeader screen={screen} setScreen={handleSetScreen} onLogout={logOut} unreadCount={unreadCount} />
           {(dataError || loadingData) && (
@@ -383,7 +385,7 @@ function CashPilotApp() {
               {dataError || "Syncing your budget..."}
             </div>
           )}
-          {!dataError && !loadingData && alertCount > 0 && (
+          {!dataError && !loadingData && useBudget && alertCount > 0 && (
             <div className={`app-notice ${hasCritical ? "error" : ""}`}>
               {alerts[0].type === "daily"
                 ? `You've spent ₹${Math.round(budgetMetrics.todaySpent)} today. Safe limit: ₹${Math.round(budgetMetrics.safeDaily)}.`
@@ -404,6 +406,7 @@ function CashPilotApp() {
               splits={splits}
               settleSplit={settleSplitAction}
               unsettleSplit={unsettleSplitAction}
+              useBudget={useBudget}
             />
           )}
           {screen === "add" && (
@@ -441,7 +444,7 @@ function CashPilotApp() {
               deleteSplit={deleteSplit}
             />
           )}
-          {screen === "budget" && <BudgetScreen settings={settings} updateSettings={updateSettings} totals={totals} addTransaction={addTransaction} accounts={accounts} />}
+          {screen === "budget" && <BudgetScreen settings={settings} updateSettings={updateSettings} totals={totals} addTransaction={addTransaction} accounts={accounts} useBudget={useBudget} />}
           {screen === "calendar" && (
             <CalendarScreen
               expenses={expenses}
@@ -474,6 +477,7 @@ function CashPilotApp() {
               theme={theme}
               toggleTheme={toggleTheme}
               onClearData={clearAllUserData}
+              useBudget={useBudget}
             />
           )}
         </div>
@@ -522,7 +526,7 @@ const navItems = [
   { id: "budget", icon: ArrowRightLeft, label: "Budget" }
 ];
 
-function Sidebar({ active, setScreen, totals }) {
+function Sidebar({ active, setScreen, totals, useBudget }) {
   return (
     <aside className="sidebar">
       <div className="brand-mark">
@@ -545,9 +549,19 @@ function Sidebar({ active, setScreen, totals }) {
         })}
       </nav>
       <div className="sidebar-card">
-        <p>Left this month</p>
-        <strong>{currency(totals.left)}</strong>
-        <span>{currency(totals.dailyLimit)} daily runway</span>
+        {useBudget ? (
+          <>
+            <p>Left this month</p>
+            <strong>{currency(totals.left)}</strong>
+            <span>{currency(totals.dailyLimit)} daily runway</span>
+          </>
+        ) : (
+          <>
+            <p>Spent this month</p>
+            <strong>{currency(totals.spent)}</strong>
+            <span>Expenses only mode</span>
+          </>
+        )}
       </div>
     </aside>
   );
@@ -612,6 +626,7 @@ function LoadingScreen() {
 }
 
 function OnboardingScreen({ profile, updateSettings }) {
+  const [mode, setMode] = useState("budget");
   const [form, setForm] = useState({ allowance: "", savingsGoal: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -620,29 +635,47 @@ function OnboardingScreen({ profile, updateSettings }) {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const allowanceVal = Number(form.allowance.replace(/[^0-9]/g, "")) || 0;
-    const savingsVal = Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0;
 
-    if (allowanceVal <= 0) {
-      setError("Please set a monthly allowance greater than 0.");
-      setBusy(false);
-      return;
-    }
-    if (savingsVal > allowanceVal) {
-      setError("Savings goal cannot be higher than your monthly allowance.");
-      setBusy(false);
-      return;
-    }
+    if (mode === "budget") {
+      const allowanceVal = Number(form.allowance.replace(/[^0-9]/g, "")) || 0;
+      const savingsVal = Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0;
 
-    try {
-      await updateSettings({
-        allowance: allowanceVal,
-        savingsGoal: savingsVal,
-      });
-    } catch (err) {
-      setError(err.message || "Failed to save settings. Please try again.");
-    } finally {
-      setBusy(false);
+      if (allowanceVal <= 0) {
+        setError("Please set a monthly allowance greater than 0.");
+        setBusy(false);
+        return;
+      }
+      if (savingsVal > allowanceVal) {
+        setError("Savings goal cannot be higher than your monthly allowance.");
+        setBusy(false);
+        return;
+      }
+
+      try {
+        await updateSettings({
+          allowance: allowanceVal,
+          savingsGoal: savingsVal,
+          useBudget: true,
+          hasOnboarded: true
+        });
+      } catch (err) {
+        setError(err.message || "Failed to save settings. Please try again.");
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      try {
+        await updateSettings({
+          allowance: 0,
+          savingsGoal: 0,
+          useBudget: false,
+          hasOnboarded: true
+        });
+      } catch (err) {
+        setError(err.message || "Failed to save settings. Please try again.");
+      } finally {
+        setBusy(false);
+      }
     }
   };
 
@@ -650,42 +683,75 @@ function OnboardingScreen({ profile, updateSettings }) {
 
   return (
     <main className="stage auth-stage">
-      <section className="auth-card" style={{ maxWidth: "420px" }}>
+      <section className="auth-card" style={{ maxWidth: "440px" }}>
         <div className="brand-mark">
           <Sparkles size={18} />
           <span>CashPilot</span>
         </div>
         <h1 style={{ fontSize: "24px", marginTop: "12px" }}>Welcome, {name}!</h1>
-        <p className="auth-subtitle" style={{ marginBottom: "20px" }}>
-          Let's set up your monthly budget to unlock your smart daily spending limits.
+        <p className="auth-subtitle">
+          How would you like to use CashPilot? Choose an option to get started:
         </p>
 
-        <form className="auth-form" onSubmit={submit}>
-          <label>
-            <span>Monthly Budget (Allowance)</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={form.allowance}
-              onChange={(e) => setForm({ ...form, allowance: e.target.value.replace(/[^0-9]/g, "") })}
-              required
-            />
-          </label>
-          <label>
-            <span>Savings Target Goal</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={form.savingsGoal}
-              onChange={(e) => setForm({ ...form, savingsGoal: e.target.value.replace(/[^0-9]/g, "") })}
-              required
-            />
-          </label>
+        <div className="onboarding-options">
+          <div
+            className={`onboarding-option-card pressable ${mode === "budget" ? "selected" : ""}`}
+            onClick={() => setMode("budget")}
+          >
+            <div className="onboarding-option-icon">
+              <Wallet size={20} />
+            </div>
+            <div className="onboarding-option-content">
+              <h3>Log Monthly Budget & Expenses</h3>
+              <p>Set a monthly budget and savings goal. Get smart daily spend limits and alerts.</p>
+            </div>
+          </div>
+
+          <div
+            className={`onboarding-option-card pressable ${mode === "no_budget" ? "selected" : ""}`}
+            onClick={() => setMode("no_budget")}
+          >
+            <div className="onboarding-option-icon">
+              <ReceiptText size={20} />
+            </div>
+            <div className="onboarding-option-content">
+              <h3>No Monthly Budget (Expenses Only)</h3>
+              <p>Log transactions directly without setting any monthly allowance or spending limit.</p>
+            </div>
+          </div>
+        </div>
+
+        <form className="auth-form" onSubmit={submit} style={{ marginTop: "14px" }}>
+          {mode === "budget" && (
+            <>
+              <label>
+                <span>Monthly Budget (Allowance)</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 10000"
+                  value={form.allowance}
+                  onChange={(e) => setForm({ ...form, allowance: e.target.value.replace(/[^0-9]/g, "") })}
+                  required
+                />
+              </label>
+              <label>
+                <span>Savings Target Goal (Optional)</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 2000"
+                  value={form.savingsGoal}
+                  onChange={(e) => setForm({ ...form, savingsGoal: e.target.value.replace(/[^0-9]/g, "") })}
+                />
+              </label>
+            </>
+          )}
 
           {error && <p className="form-error">{error}</p>}
 
           <button className="primary-button pressable" disabled={busy} type="submit" style={{ marginTop: "12px" }}>
-            {busy ? "Setting up..." : "Start managing budget"}
+            {busy ? "Setting up..." : mode === "budget" ? "Start with Monthly Budget" : "Continue with Expenses Only"}
           </button>
         </form>
       </section>
@@ -770,11 +836,12 @@ function AuthScreen({ authError, onSignIn, onSignUp, onGoogle }) {
   );
 }
 
-function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, onAdd, onRecords, splits, settleSplit, unsettleSplit }) {
+function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, onAdd, onRecords, splits, settleSplit, unsettleSplit, useBudget }) {
   const [aiAdvice, setAiAdvice] = useState("");
   const [balanceHidden, setBalanceHidden] = useState(true);
 
   useEffect(() => {
+    if (!useBudget) return;
     const topCats = totals.byCategory
       .filter((c) => c.total > 0)
       .slice(0, 3)
@@ -790,7 +857,7 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
     }).then((result) => {
       if (result?.advice) setAiAdvice(result.advice);
     }).catch(() => {});
-  }, [totals.spent, settings.allowance, settings.savingsGoal]);
+  }, [totals.spent, settings.allowance, settings.savingsGoal, useBudget]);
 
   return (
     <div className="page home-page">
@@ -809,18 +876,26 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
 
       <section className="balance-block">
         <div className="balance-header">
-          <p className="eyebrow">Monthly money left</p>
+          <p className="eyebrow">{useBudget ? "Monthly money left" : "Total spent this month"}</p>
           <button className="eye-toggle pressable" onClick={() => setBalanceHidden(!balanceHidden)} aria-label={balanceHidden ? "Show balance" : "Hide balance"}>
             {balanceHidden ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
-        <h1>{balanceHidden ? `₹ ${totals.left < 0 ? "-" : ""}${"•".repeat(Math.max(1, Math.round(Math.abs(totals.left)).toString().length))}` : currency(totals.left)}</h1>
-        <AreaChart totals={totals} allowance={settings.allowance} />
+        {useBudget ? (
+          <h1>{balanceHidden ? `₹ ${totals.left < 0 ? "-" : ""}${"•".repeat(Math.max(1, Math.round(Math.abs(totals.left)).toString().length))}` : currency(totals.left)}</h1>
+        ) : (
+          <h1>{balanceHidden ? `₹ ${"•".repeat(Math.max(1, Math.round(totals.spent).toString().length))}` : currency(totals.spent)}</h1>
+        )}
+        <AreaChart totals={totals} allowance={useBudget ? settings.allowance : totals.spent} />
       </section>
 
       <div className="stat-row">
         <MiniStat title="Spent today" percent="live" value={currency(totals.todaySpent)} />
-        <MiniStat title="Safe daily spend" percent={`${totals.left > 0 ? "on track" : "over"}`} value={currency(totals.dailyLimit)} />
+        {useBudget ? (
+          <MiniStat title="Safe daily spend" percent={`${totals.left > 0 ? "on track" : "over"}`} value={currency(totals.dailyLimit)} />
+        ) : (
+          <MiniStat title="Records logged" percent={`${expenses.length} total`} value={String(expenses.length)} />
+        )}
       </div>
 
       {aiOpen && (
@@ -833,7 +908,12 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
             <span>CashPilot forecast</span>
           </div>
           <div className="ai-content">
-            <h2>{aiAdvice || (totals.left >= settings.savingsGoal ? "You can hit this month's savings goal." : "Cut snacks by ₹80/day to stay on track.")}</h2>
+            <h2>
+              {useBudget
+                ? (aiAdvice || (totals.left >= settings.savingsGoal ? "You can hit this month's savings goal." : "Cut snacks by ₹80/day to stay on track."))
+                : "Keep logging expenses to build accurate spending category trends."
+              }
+            </h2>
             <button className="dark-pill pressable" onClick={onAdd}>
               Log spend
             </button>
@@ -847,9 +927,19 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
       </button>
 
       <div className="desktop-home-grid">
-        <BudgetCard icon={<Wallet size={20} />} title="Monthly allowance" value={currency(settings.allowance)} caption="Pocket money, UPI, cash" />
-        <BudgetCard icon={<Target size={20} />} title="Savings target" value={currency(settings.savingsGoal)} caption={`${Math.round(totals.savingsProgress)}% reachable right now`} />
-        <BudgetCard icon={<ReceiptText size={20} />} title="Daily runway" value={currency(totals.dailyLimit)} caption="Suggested spend per day" />
+        {useBudget ? (
+          <>
+            <BudgetCard icon={<Wallet size={20} />} title="Monthly allowance" value={currency(settings.allowance)} caption="Pocket money, UPI, cash" />
+            <BudgetCard icon={<Target size={20} />} title="Savings target" value={currency(settings.savingsGoal)} caption={`${Math.round(totals.savingsProgress)}% reachable right now`} />
+            <BudgetCard icon={<ReceiptText size={20} />} title="Daily runway" value={currency(totals.dailyLimit)} caption="Suggested spend per day" />
+          </>
+        ) : (
+          <>
+            <BudgetCard icon={<Wallet size={20} />} title="Spent this month" value={currency(totals.spent)} caption="Across all expense categories" />
+            <BudgetCard icon={<ReceiptText size={20} />} title="Spent today" value={currency(totals.todaySpent)} caption="Logged so far today" />
+            <BudgetCard icon={<Target size={20} />} title="Total expenses" value={String(expenses.length)} caption="All recorded transactions" />
+          </>
+        )}
       </div>
 
       <CategoryBreakdown totals={totals} />
@@ -1884,7 +1974,7 @@ function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unset
   );
 }
 
-function BudgetScreen({ settings, updateSettings, totals, addTransaction, accounts }) {
+function BudgetScreen({ settings, updateSettings, totals, addTransaction, accounts, useBudget }) {
   const [addMoneyOpen, setAddMoneyOpen] = useState(false);
   const [addAmount, setAddAmount] = useState("");
   const [addNote, setAddNote] = useState("");
@@ -1892,7 +1982,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
   const [addMsg, setAddMsg] = useState("");
 
   const update = (key, value) => {
-    updateSettings({ ...settings, [key]: Number(String(value).replace(/[^0-9]/g, "")) || 0 });
+    updateSettings({ ...settings, [key]: Number(String(value).replace(/[^0-9]/g, "")) || 0, useBudget: true, hasOnboarded: true });
   };
 
   const handleAddMoney = async () => {
@@ -1910,7 +2000,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
         dateKey: new Date().toISOString().slice(0, 10)
       });
       // Also increase the allowance for this month
-      updateSettings({ ...settings, allowance: settings.allowance + amount });
+      updateSettings({ ...settings, allowance: settings.allowance + amount, useBudget: true, hasOnboarded: true });
       setAddMsg(`Added ₹${amount.toLocaleString("en-IN")} to your budget.`);
       setAddAmount("");
       setAddNote("");
@@ -1926,49 +2016,89 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
     <div className="page budget-page">
       <section className="hero-copy utility-hero">
         <h1>Your<br /><span>monthly budget</span></h1>
-        <p>Tune your allowance and savings goal. CashPilot recalculates what you can spend each day.</p>
+        <p>Manage your monthly allowance, savings target, and daily spending preferences.</p>
       </section>
 
-      <button
-        className="primary-button pressable"
-        style={{ marginTop: "16px", background: "var(--green)", color: "#111", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
-        onClick={() => setAddMoneyOpen(true)}
-      >
-        <Plus size={18} /> Add money to budget
-      </button>
-
-      <div className="detail-grid">
-        <section className="detail-card tint">
-          <p>Monthly allowance</p>
-          <AmountInput value={String(settings.allowance || "")} onChange={(val) => update("allowance", val)} />
-        </section>
-        <section className="detail-card tint">
-          <p>Savings goal</p>
-          <AmountInput value={String(settings.savingsGoal || "")} onChange={(val) => update("savingsGoal", val)} />
-        </section>
-        <section className="detail-card">
-          <p>Spent so far</p>
-          <strong>{currency(totals.spent)}</strong>
-          <small>Across all logged records.</small>
-        </section>
-        <section className="detail-card">
-          <p>Safe daily spend</p>
-          <strong>{currency(totals.dailyLimit)}</strong>
-          <small>Based on the money left this month.</small>
-        </section>
+      <div className="onboarding-options" style={{ marginTop: "16px" }}>
+        <div
+          className={`onboarding-option-card pressable ${useBudget ? "selected" : ""}`}
+          onClick={() => updateSettings({ ...settings, useBudget: true, hasOnboarded: true })}
+          style={{ padding: "12px 14px" }}
+        >
+          <div className="onboarding-option-icon" style={{ width: "32px", height: "32px" }}>
+            <Wallet size={16} />
+          </div>
+          <div className="onboarding-option-content">
+            <h3 style={{ fontSize: "14px" }}>Monthly Budget & Expenses</h3>
+            <p style={{ fontSize: "11px" }}>Set allowance and safe daily spend limits.</p>
+          </div>
+        </div>
+        <div
+          className={`onboarding-option-card pressable ${!useBudget ? "selected" : ""}`}
+          onClick={() => updateSettings({ ...settings, useBudget: false, hasOnboarded: true })}
+          style={{ padding: "12px 14px" }}
+        >
+          <div className="onboarding-option-icon" style={{ width: "32px", height: "32px" }}>
+            <ReceiptText size={16} />
+          </div>
+          <div className="onboarding-option-content">
+            <h3 style={{ fontSize: "14px" }}>Expenses Only (No Monthly Budget)</h3>
+            <p style={{ fontSize: "11px" }}>Log expenses without fixed monthly allowance limits.</p>
+          </div>
+        </div>
       </div>
-      <section className="milestone-card pressable">
-        <div className="milestone-title">
-          <Sparkles size={16} />
-          <h2>{Math.round(totals.savingsProgress)}% of savings target covered</h2>
-        </div>
-        <p>Keep your remaining balance above {currency(settings.savingsGoal)} to finish the month with your planned savings.</p>
-        <div className="progress big-progress">
-          <span style={{ width: `${totals.savingsProgress}%` }} />
-        </div>
-      </section>
 
+      {useBudget && (
+        <button
+          className="primary-button pressable"
+          style={{ marginTop: "12px", background: "var(--green)", color: "#111", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+          onClick={() => setAddMoneyOpen(true)}
+        >
+          <Plus size={18} /> Add money to budget
+        </button>
+      )}
 
+      {useBudget ? (
+        <>
+          <div className="detail-grid" style={{ marginTop: "16px" }}>
+            <section className="detail-card tint">
+              <p>Monthly allowance</p>
+              <AmountInput value={String(settings.allowance || "")} onChange={(val) => update("allowance", val)} />
+            </section>
+            <section className="detail-card tint">
+              <p>Savings goal</p>
+              <AmountInput value={String(settings.savingsGoal || "")} onChange={(val) => update("savingsGoal", val)} />
+            </section>
+            <section className="detail-card">
+              <p>Spent so far</p>
+              <strong>{currency(totals.spent)}</strong>
+              <small>Across all logged records.</small>
+            </section>
+            <section className="detail-card">
+              <p>Safe daily spend</p>
+              <strong>{currency(totals.dailyLimit)}</strong>
+              <small>Based on the money left this month.</small>
+            </section>
+          </div>
+          <section className="milestone-card pressable">
+            <div className="milestone-title">
+              <Sparkles size={16} />
+              <h2>{Math.round(totals.savingsProgress)}% of savings target covered</h2>
+            </div>
+            <p>Keep your remaining balance above {currency(settings.savingsGoal)} to finish the month with your planned savings.</p>
+            <div className="progress big-progress">
+              <span style={{ width: `${totals.savingsProgress}%` }} />
+            </div>
+          </section>
+        </>
+      ) : (
+        <section className="detail-card" style={{ marginTop: "16px", padding: "20px" }}>
+          <p style={{ fontSize: "15px", fontWeight: "700", marginBottom: "6px" }}>Expenses Only Mode Active</p>
+          <small style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+            You are currently tracking expenses directly without a monthly budget allowance limit. Total spent so far this month is <strong>{currency(totals.spent)}</strong>.
+          </small>
+        </section>
+      )}
 
       {addMoneyOpen && createPortal(
         <div className="modal-backdrop" onMouseDown={() => setAddMoneyOpen(false)}>
@@ -2003,11 +2133,12 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
   );
 }
 
-function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLogout, transactions, accounts, goals, theme, toggleTheme, onClearData }) {
+function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLogout, transactions, accounts, goals, theme, toggleTheme, onClearData, useBudget }) {
   const [form, setForm] = useState({
     name: profile.name || "",
     allowance: String(settings.allowance || 0),
-    savingsGoal: String(settings.savingsGoal || 0)
+    savingsGoal: String(settings.savingsGoal || 0),
+    useBudget: settings.useBudget !== false
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -2019,9 +2150,10 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
     setForm({
       name: profile.name || "",
       allowance: String(settings.allowance || 0),
-      savingsGoal: String(settings.savingsGoal || 0)
+      savingsGoal: String(settings.savingsGoal || 0),
+      useBudget: settings.useBudget !== false
     });
-  }, [profile.name, settings.allowance, settings.savingsGoal]);
+  }, [profile.name, settings.allowance, settings.savingsGoal, settings.useBudget]);
 
   const save = async (event) => {
     event.preventDefault();
@@ -2031,7 +2163,9 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
       await updateProfile({ name: form.name.trim() || "CashPilot Student", currency: profile.currency || "INR" });
       await updateSettings({
         allowance: Number(form.allowance.replace(/[^0-9]/g, "")) || 0,
-        savingsGoal: Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0
+        savingsGoal: Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0,
+        useBudget: form.useBudget,
+        hasOnboarded: true
       });
       setMessage("Settings saved to your account.");
     } catch (error) {
@@ -2085,17 +2219,52 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
           <input value={profile.email || ""} readOnly />
         </label>
         <label>
-          <span>Monthly budget</span>
-          <input inputMode="numeric" value={form.allowance} onChange={(event) => setForm({ ...form, allowance: event.target.value })} />
+          <span>App Mode</span>
+          <div className="onboarding-options" style={{ margin: "6px 0 0" }}>
+            <div
+              className={`onboarding-option-card pressable ${form.useBudget ? "selected" : ""}`}
+              onClick={() => setForm({ ...form, useBudget: true })}
+              style={{ padding: "12px 14px" }}
+            >
+              <div className="onboarding-option-icon" style={{ width: "32px", height: "32px" }}>
+                <Wallet size={16} />
+              </div>
+              <div className="onboarding-option-content">
+                <h3 style={{ fontSize: "14px" }}>Monthly Budget & Expenses</h3>
+                <p style={{ fontSize: "11px" }}>Set allowance and safe daily spend limits.</p>
+              </div>
+            </div>
+            <div
+              className={`onboarding-option-card pressable ${!form.useBudget ? "selected" : ""}`}
+              onClick={() => setForm({ ...form, useBudget: false })}
+              style={{ padding: "12px 14px" }}
+            >
+              <div className="onboarding-option-icon" style={{ width: "32px", height: "32px" }}>
+                <ReceiptText size={16} />
+              </div>
+              <div className="onboarding-option-content">
+                <h3 style={{ fontSize: "14px" }}>Expenses Only (No Monthly Budget)</h3>
+                <p style={{ fontSize: "11px" }}>Log expenses without fixed monthly allowance limits.</p>
+              </div>
+            </div>
+          </div>
         </label>
-        <label>
-          <span>Savings goal</span>
-          <input inputMode="numeric" value={form.savingsGoal} onChange={(event) => setForm({ ...form, savingsGoal: event.target.value })} />
-        </label>
+        {form.useBudget && (
+          <>
+            <label>
+              <span>Monthly budget</span>
+              <input inputMode="numeric" value={form.allowance} onChange={(event) => setForm({ ...form, allowance: event.target.value })} />
+            </label>
+            <label>
+              <span>Savings goal</span>
+              <input inputMode="numeric" value={form.savingsGoal} onChange={(event) => setForm({ ...form, savingsGoal: event.target.value })} />
+            </label>
+          </>
+        )}
         <section className="detail-card settings-summary">
-          <p>Current month</p>
-          <strong>{currency(settings.allowance)}</strong>
-          <small>{currency(settings.savingsGoal)} savings target</small>
+          <p>Current mode</p>
+          <strong>{form.useBudget ? currency(settings.allowance) : "Expenses Only"}</strong>
+          <small>{form.useBudget ? `${currency(settings.savingsGoal)} savings target` : "No monthly budget limit"}</small>
         </section>
         <section className="detail-card">
           <p>Signed in as</p>
