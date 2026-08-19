@@ -1557,6 +1557,63 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
     `${item.title} ${item.category} ${item.note}`.toLowerCase().includes(query.toLowerCase())
   );
 
+  // Format day group header label
+  const formatDayHeaderLabel = (dateStr) => {
+    if (!dateStr) return { mainLabel: "Unspecified Date", subLabel: null, isToday: false };
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return { mainLabel: formatDate(dateStr), subLabel: null, isToday: false };
+    
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+
+    const todayStr = today();
+    const yesterdayObj = new Date();
+    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    const yesterdayStr = `${yesterdayObj.getFullYear()}-${String(yesterdayObj.getMonth() + 1).padStart(2, "0")}-${String(yesterdayObj.getDate()).padStart(2, "0")}`;
+
+    const dateFormatted = d.toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
+
+    if (dateStr === todayStr) {
+      return { mainLabel: "Today", subLabel: dateFormatted, isToday: true };
+    } else if (dateStr === yesterdayStr) {
+      return { mainLabel: "Yesterday", subLabel: dateFormatted, isYesterday: true };
+    } else {
+      return { mainLabel: dateFormatted, subLabel: null, isToday: false };
+    }
+  };
+
+  // Group filtered expenses by date
+  const groupedExpenses = useMemo(() => {
+    const groupsMap = new Map();
+    
+    filtered.forEach((item, index) => {
+      const dateKey = item.date || "unknown";
+      if (!groupsMap.has(dateKey)) {
+        groupsMap.set(dateKey, {
+          dateKey,
+          items: [],
+          totalAmount: 0
+        });
+      }
+      const group = groupsMap.get(dateKey);
+      group.items.push({ item, index });
+      group.totalAmount += Number(item.amount || 0);
+    });
+
+    return Array.from(groupsMap.values()).sort((a, b) => {
+      if (a.dateKey === "unknown") return 1;
+      if (b.dateKey === "unknown") return -1;
+      return b.dateKey.localeCompare(a.dateKey);
+    });
+  }, [filtered]);
+
   // Pointer down (start long-press or direct grip drag)
   const handleItemPointerDown = (e, index, immediate = false) => {
     if (e.target.closest("button") || e.target.closest("a") || e.target.closest("input")) {
@@ -1611,7 +1668,7 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
         if (e.cancelable) e.preventDefault();
 
         if (listRef.current) {
-          const rows = Array.from(listRef.current.children);
+          const rows = Array.from(listRef.current.querySelectorAll(".expense-row"));
           for (let i = 0; i < rows.length; i++) {
             const rect = rows[i].getBoundingClientRect();
             if (currentY >= rect.top && currentY <= rect.bottom) {
@@ -1708,23 +1765,51 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
           <button className="dark-pill pressable" onClick={onAdd}>Add new</button>
         </div>
       </div>
-      <div className="expense-list full" ref={listRef}>
-        {filtered.map((item, index) => (
-          <ExpenseRow
-            key={item.id}
-            expense={item}
-            onDelete={onDelete}
-            onEdit={onEdit}
-            splits={splits}
-            settleSplit={settleSplit}
-            unsettleSplit={unsettleSplit}
-            showGrip={true}
-            isDragging={draggedIndex === index}
-            isDragOver={dragOverIndex === index && draggedIndex !== index}
-            onPointerDown={(e) => handleItemPointerDown(e, index, false)}
-            onGripPointerDown={(e) => handleItemPointerDown(e, index, true)}
-          />
-        ))}
+      <div className="daily-records-container" ref={listRef}>
+        {groupedExpenses.map((group) => {
+          const { mainLabel, subLabel, isToday } = formatDayHeaderLabel(group.dateKey);
+          return (
+            <div key={group.dateKey} className="daily-records-group">
+              <div className="daily-records-group-header">
+                <div className="day-header-left">
+                  <span className={`day-indicator-dot ${isToday ? "today" : ""}`}>
+                    <CalendarDays size={14} />
+                  </span>
+                  <div className="day-header-titles">
+                    <strong className="day-main-label">{mainLabel}</strong>
+                    {subLabel && <span className="day-sub-label">{subLabel}</span>}
+                  </div>
+                </div>
+                <div className="day-header-right">
+                  <span className="day-count-badge">
+                    {group.items.length} {group.items.length === 1 ? "record" : "records"}
+                  </span>
+                  <span className="day-total-badge">
+                    Day Total: <strong>{currency(group.totalAmount)}</strong>
+                  </span>
+                </div>
+              </div>
+              <div className="expense-list full group-list">
+                {group.items.map(({ item, index }) => (
+                  <ExpenseRow
+                    key={item.id}
+                    expense={item}
+                    onDelete={onDelete}
+                    onEdit={onEdit}
+                    splits={splits}
+                    settleSplit={settleSplit}
+                    unsettleSplit={unsettleSplit}
+                    showGrip={true}
+                    isDragging={draggedIndex === index}
+                    isDragOver={dragOverIndex === index && draggedIndex !== index}
+                    onPointerDown={(e) => handleItemPointerDown(e, index, false)}
+                    onGripPointerDown={(e) => handleItemPointerDown(e, index, true)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
       {filtered.length === 0 && <p className="empty-state">No matching expense records yet.</p>}
 
