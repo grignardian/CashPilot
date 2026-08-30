@@ -1,52 +1,52 @@
-# 💸 CashPilot
+# CashPilot
 
 > A smart, student-focused expense manager — built as a Progressive Web App with real-time Firebase sync, AI-powered spending advice, and a clean dark UI.
 
 <br />
 
-## ✨ Features
+## Features
 
-### 📊 Dashboard
+### Dashboard
 - Live **monthly balance** with animated area chart
 - **Safe daily spend** calculator — recalculates remaining days vs. money left
 - AI-powered **spending forecast** using Google Gemini
 - Category breakdown with progress bars
 - Recent expense list & savings goal preview
 
-### 📝 Expense Logging
+### Expense Logging
 - Add expenses with name, amount (custom calculator input), category, date, and notes
 - AI auto-suggests category and title based on what you type
 - 5 categories: Food, Transport, Books, Hangout, Other
 
-### 🗂️ Daily Records
+### Daily Records
 - Full searchable expense history
 - Delete individual records
 - Clean card layout with category icons
 
-### 📅 Expense Calendar
+### Expense Calendar
 - Monthly heatmap calendar — darker purple = heavier spending
 - Tap any day to see what you spent
 - Weekly trend bar chart
 - Category split visualization
 
-### 💰 Budget Management
+### Budget Management
 - Set monthly allowance and savings goal
 - "Add money to budget" — logs income and updates allowance
 - Savings progress meter
 - Safe daily runway display
 
-### 🔔 Inbox / Notifications
+### Inbox / Notifications
 - In-app notification system for budget alerts
 - Mark as read / clear all
 - Bill split tracker (add & settle shared expenses)
 
-### ⚙️ Settings
+### Settings
 - Edit name, email, monthly budget, and savings goal
 - Light / Dark mode toggle
 - Export data as **JSON** (full backup) or **CSV** (expenses only)
 - Sign out
 
-### 📲 PWA (Progressive Web App)
+### PWA (Progressive Web App)
 - Installable on Android, iOS, and Desktop
 - Custom home screen icon
 - Standalone display (no browser chrome)
@@ -54,7 +54,7 @@
 
 <br />
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -70,7 +70,7 @@
 
 <br />
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 CashPilot/
@@ -127,7 +127,7 @@ CashPilot/
 
 <br />
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Clone the repo
 
@@ -193,7 +193,7 @@ Open [http://localhost:5173](http://localhost:5173)
 
 <br />
 
-## 🔐 Firestore Security Rules
+## Firestore Security Rules
 
 All user data is strictly isolated — users can only read and write their own documents:
 
@@ -209,7 +209,7 @@ match /users/{userId} {
 
 <br />
 
-## 📦 Build for Production
+## Build for Production
 
 ```bash
 npm run build
@@ -219,7 +219,7 @@ Output goes to `dist/`. You can deploy to Firebase Hosting, Vercel, or any stati
 
 <br />
 
-## 🎨 Design System
+## Design System
 
 The entire app uses CSS custom properties defined in `:root` in `styles.css`:
 
@@ -239,7 +239,7 @@ Font: **Inter** (Google Fonts, weights 400–900)
 
 <br />
 
-## 📱 Installing as a PWA
+## Installing as a PWA
 
 ### Android (Chrome)
 - Open the app in Chrome
@@ -254,7 +254,7 @@ Font: **Inter** (Google Fonts, weights 400–900)
 
 <br />
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/your-feature`
@@ -264,7 +264,7 @@ Font: **Inter** (Google Fonts, weights 400–900)
 
 <br />
 
-## 📄 License
+## License
 
 MIT — free to use, modify, and distribute.
 
@@ -272,4 +272,4 @@ MIT — free to use, modify, and distribute.
 
 ---
 
-Made with 💜 by [Labhansh](https://github.com/Grignardz)
+Made with 💜 by [Labhansh](https://github.com/grignardian)
