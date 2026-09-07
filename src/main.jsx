@@ -52,7 +52,7 @@ import { getTierForAmount } from "./utils/calendarHeatmap";
 import { suggestCategoryAndName, getSpendingAdvice, isGeminiConfigured } from "./utils/geminiIntegration";
 import { exportDataAsJSON, exportAsCSV, downloadFile } from "./utils/dataExport";
 import { generateMonthlyRecap, saveMonthlyRecap } from "./utils/dataManagement";
-import { getMonthContext, getPastCyclesSummaries } from "./utils/budgetCalculations";
+import { getMonthContext, getLastMonthLeftover } from "./utils/budgetCalculations";
 import "./styles.css";
 
 const categories = [
@@ -148,8 +148,7 @@ function CashPilotApp() {
 
   // Utility hooks integration
   const budgetMetrics = useBudgetMetrics(transactions, settings);
-  const pastCycles = useMemo(() => getPastCyclesSummaries(transactions, settings, 1), [transactions, settings]);
-  const prevCycle = pastCycles[0];
+  const prevCycle = useMemo(() => getLastMonthLeftover(transactions, settings), [transactions, settings]);
   const { alerts, alertCount, hasCritical, dismiss: dismissAlert, refresh: refreshAlerts } = useAlerts(transactions, settings);
   const { unreadCount, notifications, add: addNotification, read: readNotification, readAll: readAllNotifications, remove: removeNotification, refresh: refreshNotifications } = useNotifications();
   const { recurring, dueItems, suggestions: recurringSuggestions, add: addRecurring, remove: removeRecurring, markLogged, refresh: refreshRecurring } = useRecurringExpenses(transactions);
@@ -182,25 +181,8 @@ function CashPilotApp() {
 
     // If current cycle isn't marked configured yet
     if (!isConfigured) {
-      // Calculate previous cycle's leftover balance
-      const currentStartDate = new Date(budgetMetrics.context.startDateKey);
-      const prevCycleDate = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
-      const prevCtx = getMonthContext(prevCycleDate);
-
-      // Sum expenses in the previous cycle range
-      const prevSpent = transactions
-        .filter((tx) => tx.type === "expense" && tx.dateKey >= prevCtx.startDateKey && tx.dateKey <= prevCtx.endDateKey)
-        .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
-
-      // Calculate spendable leftover
-      const prevSpendable = Math.max(0, settings.allowance - settings.savingsGoal);
-      const remaining = prevSpendable - prevSpent;
-
-      if (remaining > 0) {
-        setPrevCycleLeftover(remaining);
-      } else {
-        setPrevCycleLeftover(0);
-      }
+      const lastMonth = getLastMonthLeftover(transactions, settings);
+      setPrevCycleLeftover(lastMonth.leftover > 0 ? lastMonth.leftover : 0);
       setShowResetModal(true);
     }
   }, [loadingData, user, settings, transactions.length, budgetMetrics.context.monthKey]);
@@ -211,20 +193,16 @@ function CashPilotApp() {
       
       // If there is rollover, add a transaction to record it
       if (rolloverAmt > 0) {
-        const currentStartDate = new Date(budgetMetrics.context.startDateKey);
-        const prevCycleDate = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
-        const prevCtx = getMonthContext(prevCycleDate);
-        const prevMonthName = new Date(prevCtx.startDateKey).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-
+        const lastMonth = getLastMonthLeftover(transactions, settings);
         await addTransaction({
           amount: rolloverAmt,
           type: "income",
           category: "Other",
           accountId: accounts?.[0]?.id || "",
-          note: `Rollover from ${prevMonthName} cycle`,
+          note: `Rollover from ${lastMonth.monthName} leftover`,
           dateKey: today()
         });
-        localStorage.setItem(`cashpilot-rollover-${prevCtx.monthKey}`, "true");
+        localStorage.setItem(`cashpilot-rollover-${lastMonth.monthKey}`, "true");
       }
 
       // Update allowance settings with rollover included
