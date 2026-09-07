@@ -141,7 +141,6 @@ function CashPilotApp() {
   };
   const [theme, setTheme] = useState(() => localStorage.getItem("cashpilot-theme") || "dark");
   const [showResetModal, setShowResetModal] = useState(false);
-  const [showPastCyclesModal, setShowPastCyclesModal] = useState(false);
   const [prevCycleLeftover, setPrevCycleLeftover] = useState(0);
   const settings = profile.settings;
   const useBudget = settings?.useBudget !== false;
@@ -149,7 +148,7 @@ function CashPilotApp() {
 
   // Utility hooks integration
   const budgetMetrics = useBudgetMetrics(transactions, settings);
-  const pastCycles = useMemo(() => getPastCyclesSummaries(transactions, settings, 6), [transactions, settings]);
+  const pastCycles = useMemo(() => getPastCyclesSummaries(transactions, settings, 1), [transactions, settings]);
   const prevCycle = pastCycles[0];
   const { alerts, alertCount, hasCritical, dismiss: dismissAlert, refresh: refreshAlerts } = useAlerts(transactions, settings);
   const { unreadCount, notifications, add: addNotification, read: readNotification, readAll: readAllNotifications, remove: removeNotification, refresh: refreshNotifications } = useNotifications();
@@ -205,35 +204,6 @@ function CashPilotApp() {
       setShowResetModal(true);
     }
   }, [loadingData, user, settings, transactions.length, budgetMetrics.context.monthKey]);
-
-  const handleRolloverMoney = async (cycle, customAmount) => {
-    try {
-      const amount = Number(customAmount !== undefined ? customAmount : Math.round(cycle.leftover));
-      if (!amount || amount <= 0) return;
-
-      await addTransaction({
-        amount,
-        type: "income",
-        category: "Other",
-        accountId: accounts?.[0]?.id || "",
-        note: `Rollover from ${cycle.monthName} cycle`,
-        dateKey: today()
-      });
-
-      await updateSettings({
-        ...settings,
-        allowance: Number(settings.allowance || 0) + amount,
-        useBudget: true,
-        hasOnboarded: true
-      });
-
-      localStorage.setItem(`cashpilot-rollover-${cycle.monthKey}`, "true");
-      addNotification("budget", `Rolled over ₹${amount.toLocaleString("en-IN")}`, `Added leftover balance from ${cycle.monthName} into current budget.`, "success");
-      refreshAlerts();
-    } catch (err) {
-      console.error("Failed to roll over cycle balance", err);
-    }
-  };
 
   const handleSaveBudgetCycle = async (newAllowance, newSavingsGoal, rolloverChecked) => {
     try {
@@ -452,9 +422,6 @@ function CashPilotApp() {
               settleSplit={settleSplitAction}
               unsettleSplit={unsettleSplitAction}
               useBudget={useBudget}
-              prevCycle={prevCycle}
-              onRollover={handleRolloverMoney}
-              onOpenPastCycles={() => setShowPastCyclesModal(true)}
             />
           )}
           {screen === "add" && (
@@ -501,10 +468,6 @@ function CashPilotApp() {
               accounts={accounts}
               useBudget={useBudget}
               prevCycle={prevCycle}
-              pastCycles={pastCycles}
-              onRollover={handleRolloverMoney}
-              onOpenPastCycles={() => setShowPastCyclesModal(true)}
-              onReconfigureCycle={() => setShowResetModal(true)}
             />
           )}
           {screen === "calendar" && (
@@ -552,13 +515,6 @@ function CashPilotApp() {
           prevLeftover={prevCycleLeftover}
           onSave={handleSaveBudgetCycle}
           onClose={() => setShowResetModal(false)}
-        />
-      )}
-      {showPastCyclesModal && (
-        <PastCyclesModal
-          pastCycles={pastCycles}
-          onClose={() => setShowPastCyclesModal(false)}
-          onRollover={handleRolloverMoney}
         />
       )}
       {modalOpen && (
@@ -906,7 +862,7 @@ function AuthScreen({ authError, onSignIn, onSignUp, onGoogle }) {
   );
 }
 
-function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, onAdd, onRecords, splits, settleSplit, unsettleSplit, useBudget, prevCycle, onRollover, onOpenPastCycles }) {
+function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, onAdd, onRecords, splits, settleSplit, unsettleSplit, useBudget }) {
   const [aiAdvice, setAiAdvice] = useState("");
   const [balanceHidden, setBalanceHidden] = useState(true);
 
@@ -932,7 +888,7 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
   return (
     <div className="page home-page">
       <div className="home-actions">
-        <button className="invite pressable" onClick={onOpenPastCycles} title="View monthly cycle details">
+        <button className="invite pressable">
           <CalendarDays size={15} />
           {new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" })}
         </button>
@@ -958,23 +914,6 @@ function HomeScreen({ expenses, totals, settings, goals, aiOpen, onDismissAi, on
         )}
         <AreaChart totals={totals} allowance={useBudget ? settings.allowance : totals.spent} />
       </section>
-
-      {useBudget && prevCycle && prevCycle.leftover > 0 && !prevCycle.isRolledOver && (
-        <div className="home-leftover-banner">
-          <div className="home-leftover-info">
-            <div className="home-leftover-icon">
-              <Sparkles size={16} />
-            </div>
-            <div className="home-leftover-text">
-              <strong>₹{Math.round(prevCycle.leftover).toLocaleString("en-IN")} unspent from {prevCycle.monthName}</strong>
-              <span>Add leftover money to boost this month's budget</span>
-            </div>
-          </div>
-          <button className="home-leftover-action pressable" onClick={() => onRollover(prevCycle)}>
-            <Plus size={14} /> Add Up
-          </button>
-        </div>
-      )}
 
       <div className="stat-row">
         <MiniStat title="Spent today" percent="live" value={currency(totals.todaySpent)} />
@@ -2146,7 +2085,7 @@ function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unset
   );
 }
 
-function BudgetScreen({ settings, updateSettings, totals, addTransaction, accounts, useBudget, prevCycle, pastCycles, onRollover, onOpenPastCycles, onReconfigureCycle }) {
+function BudgetScreen({ settings, updateSettings, totals, addTransaction, accounts, useBudget, prevCycle }) {
   const [addMoneyOpen, setAddMoneyOpen] = useState(false);
   const [addAmount, setAddAmount] = useState("");
   const [addNote, setAddNote] = useState("");
@@ -2251,6 +2190,11 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
               <strong>{currency(totals.dailyLimit)}</strong>
               <small>Based on the money left this month.</small>
             </section>
+            <section className="detail-card">
+              <p>Last month leftover</p>
+              <strong>{currency(prevCycle?.leftover || 0)}</strong>
+              <small>{prevCycle?.monthName ? `${prevCycle.monthName} unspent` : "From previous cycle"}</small>
+            </section>
           </div>
 
           <section className="milestone-card pressable">
@@ -2263,74 +2207,6 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
               <span style={{ width: `${totals.savingsProgress}%` }} />
             </div>
           </section>
-
-          {prevCycle && (
-            <section className={`previous-cycle-card ${prevCycle.leftover > 0 && !prevCycle.isRolledOver ? "highlight" : ""}`}>
-              <div className="previous-cycle-head">
-                <div>
-                  <div className="previous-cycle-title">
-                    <History size={16} />
-                    <span>Previous Cycle ({prevCycle.monthName})</span>
-                  </div>
-                  <p className="previous-cycle-subtitle">{prevCycle.cycleLabel}</p>
-                </div>
-                {prevCycle.isRolledOver ? (
-                  <span className="cycle-badge rolled-over">
-                    <CheckCircle2 size={12} /> Rolled Over
-                  </span>
-                ) : prevCycle.leftover > 0 ? (
-                  <span className="cycle-badge available">
-                    <Sparkles size={12} /> ₹{Math.round(prevCycle.leftover).toLocaleString("en-IN")} Left
-                  </span>
-                ) : (
-                  <span className="cycle-badge neutral">
-                    ₹0 Left
-                  </span>
-                )}
-              </div>
-
-              <div className="previous-cycle-grid">
-                <div className="previous-cycle-col">
-                  <span>Allowance</span>
-                  <strong>{currency(prevCycle.allowance || 0)}</strong>
-                </div>
-                <div className="previous-cycle-col">
-                  <span>Spent</span>
-                  <strong>{currency(prevCycle.totalSpent || 0)}</strong>
-                </div>
-                <div className="previous-cycle-col">
-                  <span>Money Left</span>
-                  <strong className={prevCycle.leftover > 0 ? "leftover-val" : ""}>
-                    {currency(prevCycle.leftover || 0)}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="previous-cycle-actions">
-                {prevCycle.leftover > 0 && !prevCycle.isRolledOver ? (
-                  <button
-                    className="rollover-btn-primary pressable"
-                    onClick={() => onRollover(prevCycle)}
-                  >
-                    <Plus size={15} /> Add ₹{Math.round(prevCycle.leftover).toLocaleString("en-IN")} leftover to budget
-                  </button>
-                ) : null}
-                <button
-                  className="rollover-btn-secondary pressable"
-                  onClick={onOpenPastCycles}
-                >
-                  <CalendarDays size={14} /> Past Cycles & Leftover History
-                </button>
-                <button
-                  className="rollover-btn-secondary pressable"
-                  onClick={onReconfigureCycle}
-                  title="Reconfigure current month cycle targets"
-                >
-                  <RotateCcw size={14} /> Reconfigure Cycle
-                </button>
-              </div>
-            </section>
-          )}
         </>
       ) : (
         <section className="detail-card" style={{ marginTop: "16px", padding: "20px" }}>
@@ -3250,96 +3126,6 @@ function InstallPrompt() {
       </div>
     </div>,
     document.body
-  );
-}
-
-function PastCyclesModal({ pastCycles, onClose, onRollover }) {
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Past Monthly Cycles and Leftover Balances" onMouseDown={onClose}>
-      <section className="modal-card" style={{ maxWidth: "440px" }} onMouseDown={(e) => e.stopPropagation()}>
-        <button className="close-button" aria-label="Close" onClick={onClose}>
-          <X size={16} />
-        </button>
-        <div className="modal-icon" style={{ background: "rgba(124, 92, 191, 0.15)", color: "var(--accent-light)" }}>
-          <History size={22} />
-        </div>
-        <h2 style={{ fontSize: "19px", marginTop: "10px", textAlign: "center" }}>
-          Past Cycles & Leftover Balances
-        </h2>
-        <p className="auth-subtitle" style={{ textAlign: "center", marginBottom: "12px", fontSize: "12px" }}>
-          Review unspent money from previous 7th-to-6th cycles and add leftover funds to your budget.
-        </p>
-
-        <div className="past-cycles-list">
-          {pastCycles.length === 0 ? (
-            <p style={{ textAlign: "center", color: "var(--text-secondary)", padding: "20px" }}>
-              No past cycles found.
-            </p>
-          ) : (
-            pastCycles.map((cycle) => (
-              <div
-                key={cycle.monthKey}
-                className={`past-cycle-card ${cycle.leftover > 0 && !cycle.isRolledOver ? "highlight" : ""}`}
-              >
-                <div className="past-cycle-top">
-                  <div>
-                    <div className="past-cycle-name">{cycle.monthName}</div>
-                    <div className="past-cycle-dates">{cycle.cycleLabel}</div>
-                  </div>
-                  {cycle.isRolledOver ? (
-                    <span className="cycle-badge rolled-over">
-                      <CheckCircle2 size={11} /> Rolled Over
-                    </span>
-                  ) : cycle.leftover > 0 ? (
-                    <span className="cycle-badge available">
-                      <Sparkles size={11} /> ₹{Math.round(cycle.leftover).toLocaleString("en-IN")} Left
-                    </span>
-                  ) : (
-                    <span className="cycle-badge neutral">
-                      ₹0 Left
-                    </span>
-                  )}
-                </div>
-
-                <div className="past-cycle-stats">
-                  <div className="past-cycle-stat">
-                    <label>Allowance</label>
-                    <strong>{currency(cycle.allowance)}</strong>
-                  </div>
-                  <div className="past-cycle-stat">
-                    <label>Spent</label>
-                    <strong>{currency(cycle.totalSpent)}</strong>
-                  </div>
-                  <div className="past-cycle-stat">
-                    <label>Money Left</label>
-                    <strong className={cycle.leftover > 0 ? "leftover-green" : ""}>
-                      {currency(cycle.leftover)}
-                    </strong>
-                  </div>
-                </div>
-
-                {cycle.leftover > 0 && !cycle.isRolledOver ? (
-                  <button
-                    className="rollover-btn-primary pressable"
-                    style={{ marginTop: "4px" }}
-                    onClick={() => {
-                      onRollover(cycle);
-                      onClose();
-                    }}
-                  >
-                    <Plus size={15} /> Add ₹{Math.round(cycle.leftover).toLocaleString("en-IN")} leftover to budget
-                  </button>
-                ) : null}
-              </div>
-            ))
-          )}
-        </div>
-
-        <button className="primary-button pressable" onClick={onClose} style={{ marginTop: "10px" }}>
-          Close
-        </button>
-      </section>
-    </div>
   );
 }
 
