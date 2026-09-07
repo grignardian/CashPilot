@@ -2088,6 +2088,13 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
         note: `Rollover from ${prevCycle.monthName} leftover`,
         dateKey: today()
       });
+      // Also increase this month's allowance
+      await updateSettings({
+        ...settings,
+        allowance: (Number(settings?.allowance) || 0) + amt,
+        useBudget: true,
+        hasOnboarded: true
+      });
       if (prevCycle?.monthKey) {
         localStorage.setItem(`cashpilot-rollover-${prevCycle.monthKey}`, "true");
       }
@@ -2102,8 +2109,18 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
     if (rollingOver) return;
     setRollingOver(true);
     try {
+      const amt = Number(rolloverTx?.amount) || Math.round(prevCycle?.leftover || 0);
       if (rolloverTx?.id && deleteTransaction) {
         await deleteTransaction(rolloverTx.id);
+      }
+      // Revert this month's allowance back
+      if (amt > 0) {
+        await updateSettings({
+          ...settings,
+          allowance: Math.max(0, (Number(settings?.allowance) || 0) - amt),
+          useBudget: true,
+          hasOnboarded: true
+        });
       }
       if (prevCycle?.monthKey) {
         localStorage.removeItem(`cashpilot-rollover-${prevCycle.monthKey}`);
