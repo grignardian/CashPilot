@@ -152,3 +152,92 @@ export function sumExpensesForDate(transactions, dateKey) {
     .filter((tx) => tx.type === "expense" && tx.dateKey === dateKey)
     .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 }
+
+/**
+ * Get past cycles with allowance, spend, unspent leftover, and rollover status.
+ * @param {Array} transactions - All user transactions
+ * @param {object} settings - Profile settings ({ allowance, savingsGoal })
+ * @param {number} count - Number of past cycles to calculate (default: 6)
+ * @returns {Array<object>} Past cycle summaries
+ */
+export function getPastCyclesSummaries(transactions = [], settings = {}, count = 6) {
+  const currentCtx = getMonthContext();
+  const pastCycles = [];
+  const recaps = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("cashpilot-monthly-recaps") || "{}");
+    } catch {
+      return {};
+    }
+  })();
+
+  // Start with immediate previous cycle (1 cycle back)
+  let refDate = new Date(new Date(currentCtx.startDateKey).getTime() - 24 * 60 * 60 * 1000);
+
+  for (let i = 0; i < count; i++) {
+    const ctx = getMonthContext(refDate);
+    const recap = recaps[ctx.monthKey];
+
+    const cycleExpenses = transactions.filter(
+      (tx) => tx.type === "expense" && tx.dateKey >= ctx.startDateKey && tx.dateKey <= ctx.endDateKey
+    );
+    const cycleIncomes = transactions.filter(
+      (tx) => tx.type === "income" && tx.dateKey >= ctx.startDateKey && tx.dateKey <= ctx.endDateKey
+    );
+
+    const totalSpent = cycleExpenses.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const totalIncome = cycleIncomes.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+
+    const allowance = recap?.budget || Number(settings?.allowance || 0);
+    const savingsGoal = recap?.savingsGoal !== undefined ? recap.savingsGoal : Number(settings?.savingsGoal || 0);
+
+    const spendable = Math.max(0, allowance - savingsGoal);
+    const unspent = allowance - totalSpent;
+    const spendableLeftover = Math.max(0, spendable - totalSpent);
+    const leftover = Math.max(0, unspent);
+
+    // Format dates for display
+    const startObj = new Date(ctx.startDateKey);
+    const endObj = new Date(ctx.endDateKey);
+    const startStr = startObj.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    const endStr = endObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    const cycleLabel = `${startStr} – ${endStr}`;
+    const monthName = startObj.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+    const isMarkedRolledOver = localStorage.getItem(`cashpilot-rollover-${ctx.monthKey}`) === "true";
+    const hasRolloverTx = transactions.some((tx) => 
+      tx.type === "income" &&
+      tx.dateKey >= ctx.endDateKey &&
+      (
+        (tx.note && tx.note.toLowerCase().includes("rollover") && (tx.note.toLowerCase().includes(monthName.toLowerCase()) || tx.note.toLowerCase().includes(ctx.monthKey))) ||
+        (i === 0 && tx.note && tx.note.toLowerCase().includes("rollover from previous cycle"))
+      )
+    );
+
+    const isRolledOver = isMarkedRolledOver || hasRolloverTx;
+
+    pastCycles.push({
+      monthKey: ctx.monthKey,
+      startDateKey: ctx.startDateKey,
+      endDateKey: ctx.endDateKey,
+      monthName,
+      cycleLabel,
+      totalSpent,
+      totalIncome,
+      allowance,
+      savingsGoal,
+      spendable,
+      spendableLeftover,
+      leftover,
+      unspent,
+      transactionCount: cycleExpenses.length,
+      isRolledOver,
+      hasData: cycleExpenses.length > 0 || totalSpent > 0 || allowance > 0
+    });
+
+    refDate = new Date(new Date(ctx.startDateKey).getTime() - 24 * 60 * 60 * 1000);
+  }
+
+  return pastCycles;
+}
+

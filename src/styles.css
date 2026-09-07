@@ -2882,3 +2882,327 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   color: var(--accent-light);
   border: 1px solid rgba(124, 92, 191, 0.3);
 }
+
+/* === Previous Cycle Leftover & History Cards === */
+
+.previous-cycle-card {
+  margin-top: 18px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.previous-cycle-card.highlight {
+  border-color: rgba(200, 240, 192, 0.35);
+  background: linear-gradient(180deg, rgba(200, 240, 192, 0.04) 0%, var(--surface) 100%);
+}
+
+.previous-cycle-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.previous-cycle-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.previous-cycle-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.cycle-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cycle-badge.available {
+  background: rgba(200, 240, 192, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(200, 240, 192, 0.3);
+}
+
+.cycle-badge.rolled-over {
+  background: rgba(124, 92, 191, 0.15);
+  color: var(--accent-light);
+  border: 1px solid rgba(124, 92, 191, 0.3);
+}
+
+.cycle-badge.neutral {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.previous-cycle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.previous-cycle-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.previous-cycle-col span {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.previous-cycle-col strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.previous-cycle-col strong.leftover-val {
+  color: var(--green);
+}
+
+.previous-cycle-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rollover-btn-primary {
+  flex: 1;
+  min-width: 160px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--green);
+  color: #111;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: filter 0.15s ease, transform 0.12s ease;
+}
+
+.rollover-btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.rollover-btn-secondary {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+}
+
+.rollover-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Home Leftover Banner */
+.home-leftover-banner {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(200, 240, 192, 0.12) 0%, rgba(124, 92, 191, 0.12) 100%);
+  border: 1px solid rgba(200, 240, 192, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+.home-leftover-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.home-leftover-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(200, 240, 192, 0.2);
+  color: var(--green);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.home-leftover-text {
+  min-width: 0;
+}
+
+.home-leftover-text strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.home-leftover-text span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-leftover-action {
+  background: var(--green);
+  color: #111;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Past Cycles Modal */
+.past-cycles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+
+.past-cycle-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.past-cycle-card.highlight {
+  border-color: rgba(200, 240, 192, 0.35);
+  background: rgba(200, 240, 192, 0.03);
+}
+
+.past-cycle-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.past-cycle-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.past-cycle-dates {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.past-cycle-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+.past-cycle-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.past-cycle-stat label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.past-cycle-stat strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.past-cycle-stat strong.leftover-green {
+  color: var(--green);
+}
+
+/* Light Mode Overrides */
+[data-theme="light"] .previous-cycle-card {
+  background: #ffffff;
+  border-color: #e5e5ea;
+}
+
+[data-theme="light"] .previous-cycle-card.highlight {
+  border-color: #34c759;
+  background: #f4faf4;
+}
+
+[data-theme="light"] .previous-cycle-grid {
+  background: #f8f8fa;
+  border-color: #e5e5ea;
+}
+
+[data-theme="light"] .past-cycle-card {
+  background: #ffffff;
+  border-color: #e5e5ea;
+}
+
+[data-theme="light"] .past-cycle-stats {
+  background: #f4f4f6;
+}
+
+[data-theme="light"] .rollover-btn-secondary {
+  background: #f0f0f4;
+  color: #111;
+  border-color: #d1d1d6;
+}
+
