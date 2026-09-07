@@ -1585,9 +1585,9 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
 
   // Format day group header label
   const formatDayHeaderLabel = (dateStr) => {
-    if (!dateStr) return { mainLabel: "Unspecified Date", subLabel: null, isToday: false };
+    if (!dateStr) return { dateLabel: "Unspecified Date", isToday: false };
     const parts = dateStr.split("-");
-    if (parts.length !== 3) return { mainLabel: formatDate(dateStr), subLabel: null, isToday: false };
+    if (parts.length !== 3) return { dateLabel: formatDate(dateStr), isToday: false };
     
     const year = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10) - 1;
@@ -1600,18 +1600,17 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
     const yesterdayStr = `${yesterdayObj.getFullYear()}-${String(yesterdayObj.getMonth() + 1).padStart(2, "0")}-${String(yesterdayObj.getDate()).padStart(2, "0")}`;
 
     const dateFormatted = d.toLocaleDateString("en-IN", {
-      weekday: "short",
       day: "numeric",
-      month: "short",
-      year: "numeric"
+      month: "short"
     });
 
     if (dateStr === todayStr) {
-      return { mainLabel: "Today", subLabel: dateFormatted, isToday: true };
+      return { dateLabel: `Today · ${dateFormatted}`, isToday: true };
     } else if (dateStr === yesterdayStr) {
-      return { mainLabel: "Yesterday", subLabel: dateFormatted, isYesterday: true };
+      return { dateLabel: `Yesterday · ${dateFormatted}`, isToday: false };
     } else {
-      return { mainLabel: dateFormatted, subLabel: null, isToday: false };
+      const weekday = d.toLocaleDateString("en-IN", { weekday: "short" });
+      return { dateLabel: `${weekday}, ${dateFormatted}`, isToday: false };
     }
   };
 
@@ -1768,18 +1767,15 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
     <div className="page utility-page">
       <section className="hero-copy utility-hero">
         <h1>Daily <span>records</span></h1>
-        <p>Search, review, and clean up every rupee you logged this month.</p>
+        <p>Search, review, and manage your logged expenses.</p>
       </section>
       <label className="search-field">
         <Search size={18} />
-        <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input placeholder="Search records..." value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
-      <div className="record-toolbar" style={{ flexWrap: "wrap", gap: "8px" }}>
+      <div className="record-toolbar">
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>{filtered.length} records</span>
-          <span className="reorder-hint-badge" title="Long press any record or hold grip to move up/down">
-            <GripVertical size={13} /> Hold & drag to reorder
-          </span>
+          <span className="record-count">{filtered.length} {filtered.length === 1 ? "record" : "records"}</span>
           {customOrder.length > 0 && (
             <button className="reset-order-btn pressable" onClick={handleResetOrder}>
               Reset order
@@ -1787,33 +1783,22 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
           )}
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
-          <button className="dark-pill pressable" style={{ background: "rgba(169, 141, 245, 0.08)", border: "1px solid rgba(169, 141, 245, 0.2)", color: "var(--accent-light)" }} onClick={() => setSplitsSpaceOpen(true)}>Split records</button>
-          <button className="dark-pill pressable" onClick={onAdd}>Add new</button>
+          <button className="dark-pill pressable" style={{ background: "rgba(169, 141, 245, 0.08)", border: "1px solid rgba(169, 141, 245, 0.2)", color: "var(--accent-light)" }} onClick={() => setSplitsSpaceOpen(true)}>
+            Splits
+          </button>
+          <button className="dark-pill pressable" onClick={onAdd}>
+            + Add
+          </button>
         </div>
       </div>
       <div className="daily-records-container" ref={listRef}>
         {groupedExpenses.map((group) => {
-          const { mainLabel, subLabel, isToday } = formatDayHeaderLabel(group.dateKey);
+          const { dateLabel, isToday } = formatDayHeaderLabel(group.dateKey);
           return (
             <div key={group.dateKey} className="daily-records-group">
               <div className="daily-records-group-header">
-                <div className="day-header-left">
-                  <span className={`day-indicator-dot ${isToday ? "today" : ""}`}>
-                    <CalendarDays size={14} />
-                  </span>
-                  <div className="day-header-titles">
-                    <strong className="day-main-label">{mainLabel}</strong>
-                    {subLabel && <span className="day-sub-label">{subLabel}</span>}
-                  </div>
-                </div>
-                <div className="day-header-right">
-                  <span className="day-count-badge">
-                    {group.items.length} {group.items.length === 1 ? "record" : "records"}
-                  </span>
-                  <span className="day-total-badge">
-                    Day Total: <strong>{currency(group.totalAmount)}</strong>
-                  </span>
-                </div>
+                <span className={`day-title ${isToday ? "today" : ""}`}>{dateLabel}</span>
+                <span className="day-total">{currency(group.totalAmount)}</span>
               </div>
               <div className="expense-list full group-list">
                 {group.items.map(({ item, index }) => (
