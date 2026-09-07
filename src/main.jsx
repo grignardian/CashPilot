@@ -52,7 +52,7 @@ import { getTierForAmount } from "./utils/calendarHeatmap";
 import { suggestCategoryAndName, getSpendingAdvice, isGeminiConfigured } from "./utils/geminiIntegration";
 import { exportDataAsJSON, exportAsCSV, downloadFile } from "./utils/dataExport";
 import { generateMonthlyRecap, saveMonthlyRecap } from "./utils/dataManagement";
-import { getMonthContext, getLastMonthLeftover } from "./utils/budgetCalculations";
+import { getMonthContext, getLastMonthLeftover, extractTxDateKey } from "./utils/budgetCalculations";
 import "./styles.css";
 
 const categories = [
@@ -516,7 +516,7 @@ function transactionToExpense(tx) {
     title: title || tx.category || "Expense",
     amount: Number(tx.amount || 0),
     category: tx.category || "Other",
-    date: tx.dateKey || today(),
+    date: extractTxDateKey(tx) || today(),
     note: note || "",
     type: tx.type
   };
