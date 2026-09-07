@@ -443,6 +443,8 @@ function CashPilotApp() {
               updateSettings={updateSettings}
               totals={totals}
               addTransaction={addTransaction}
+              deleteTransaction={deleteTransaction}
+              transactions={transactions}
               accounts={accounts}
               useBudget={useBudget}
               prevCycle={prevCycle}
@@ -2048,12 +2050,70 @@ function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unset
   );
 }
 
-function BudgetScreen({ settings, updateSettings, totals, addTransaction, accounts, useBudget, prevCycle }) {
+function BudgetScreen({ settings, updateSettings, totals, addTransaction, deleteTransaction, transactions = [], accounts, useBudget, prevCycle }) {
   const [addMoneyOpen, setAddMoneyOpen] = useState(false);
   const [addAmount, setAddAmount] = useState("");
   const [addNote, setAddNote] = useState("");
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState("");
+  const [rollingOver, setRollingOver] = useState(false);
+
+  // Check if rollover transaction from prevCycle already exists
+  const rolloverTx = useMemo(() => {
+    if (!prevCycle?.monthKey) return null;
+    return (transactions || []).find(
+      (tx) =>
+        tx.type === "income" &&
+        (
+          tx.note === `Rollover from ${prevCycle.monthName} leftover` ||
+          (tx.note && tx.note.toLowerCase().includes("rollover") && (tx.note.includes(prevCycle.monthName) || tx.note.includes(prevCycle.monthKey)))
+        )
+    );
+  }, [transactions, prevCycle?.monthKey, prevCycle?.monthName]);
+
+  const isRolledOver = Boolean(
+    rolloverTx || (prevCycle?.monthKey && localStorage.getItem(`cashpilot-rollover-${prevCycle.monthKey}`) === "true")
+  );
+
+  const handleAddRollover = async () => {
+    if (!prevCycle || prevCycle.leftover <= 0 || rollingOver) return;
+    setRollingOver(true);
+    try {
+      const amt = Math.round(prevCycle.leftover);
+      await addTransaction({
+        amount: amt,
+        type: "income",
+        category: "Other",
+        accountId: accounts?.[0]?.id || "",
+        note: `Rollover from ${prevCycle.monthName} leftover`,
+        dateKey: today()
+      });
+      if (prevCycle?.monthKey) {
+        localStorage.setItem(`cashpilot-rollover-${prevCycle.monthKey}`, "true");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRollingOver(false);
+    }
+  };
+
+  const handleUndoRollover = async () => {
+    if (rollingOver) return;
+    setRollingOver(true);
+    try {
+      if (rolloverTx?.id && deleteTransaction) {
+        await deleteTransaction(rolloverTx.id);
+      }
+      if (prevCycle?.monthKey) {
+        localStorage.removeItem(`cashpilot-rollover-${prevCycle.monthKey}`);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRollingOver(false);
+    }
+  };
 
   const update = (key, value) => {
     updateSettings({ ...settings, [key]: Number(String(value).replace(/[^0-9]/g, "")) || 0, useBudget: true, hasOnboarded: true });
@@ -2157,6 +2217,57 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, accoun
               <p>Last month leftover</p>
               <strong>{currency(prevCycle?.leftover || 0)}</strong>
               <small>{prevCycle?.monthName ? `${prevCycle.monthName} unspent` : "From previous cycle"}</small>
+
+              {(prevCycle?.leftover > 0 || isRolledOver) && (
+                <div style={{ marginTop: "10px" }}>
+                  {isRolledOver ? (
+                    <button
+                      type="button"
+                      className="pressable"
+                      onClick={handleUndoRollover}
+                      disabled={rollingOver}
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        padding: "4px 10px",
+                        borderRadius: "999px",
+                        border: "1px solid var(--border)",
+                        background: "rgba(255, 255, 255, 0.05)",
+                        color: "var(--text-secondary)",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px"
+                      }}
+                      title="Undo rollover to this month"
+                    >
+                      <CheckCircle2 size={12} color="var(--green)" /> Added · <span style={{ textDecoration: "underline", color: "var(--text)" }}>Undo</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="pressable"
+                      onClick={handleAddRollover}
+                      disabled={rollingOver}
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        padding: "5px 12px",
+                        borderRadius: "999px",
+                        border: "1px solid var(--green)",
+                        background: "rgba(200, 240, 192, 0.12)",
+                        color: "var(--green)",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px"
+                      }}
+                    >
+                      <Plus size={12} /> Add to this month
+                    </button>
+                  )}
+                </div>
+              )}
             </section>
           </div>
 
