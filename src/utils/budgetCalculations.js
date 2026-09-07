@@ -189,13 +189,16 @@ export function extractTxDateKey(tx) {
 
 /**
  * Get last month's leftover balance and summary.
- * Robustly calculates unspent money across candidate cycle ranges, calendar months, and localStorage recaps.
+ * Accurately computes unspent money from the previous 7th-to-6th cycle (including any extra money added).
  * @param {Array} transactions - All user transactions
  * @param {object} settings - User profile settings ({ allowance, savingsGoal })
  * @returns {object} Last month leftover summary
  */
 export function getLastMonthLeftover(transactions = [], settings = {}) {
-  const now = new Date();
+  const currentCtx = getMonthContext();
+  const currentStartDate = new Date(currentCtx.startDateKey);
+  const prevCycleRef = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
+  const prevCtx = getMonthContext(prevCycleRef);
 
   // Read saved recaps if present
   let recaps = {};
@@ -205,39 +208,15 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     recaps = {};
   }
 
-  // Determine baseline allowance
-  let baseAllowance = Number(settings?.allowance || 0);
+  // Baseline monthly allowance
+  const recap = recaps[prevCtx.monthKey];
+  let baseAllowance = Number(recap?.budget || settings?.allowance || 0);
   if (!baseAllowance) {
     try {
       const saved = JSON.parse(localStorage.getItem("cashpilot-student-settings") || "{}");
       baseAllowance = Number(saved?.allowance || 0);
     } catch { /* ignore */ }
   }
-
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevYear = prevMonthDate.getFullYear();
-  const prevMonth = prevMonthDate.getMonth();
-  const prevMonthKey = `${prevYear}-${String(prevMonth + 1).padStart(2, "0")}`;
-  const prevMonthName = prevMonthDate.toLocaleDateString("en-IN", { month: "long" });
-
-  const currentYear = now.getFullYear();
-  const currentMonthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-
-  // Candidate A: 7th-to-6th cycle ending this month (e.g. Aug 7 to Sep 6)
-  const cycleAStart = `${prevMonthKey}-07`;
-  const cycleAEnd = `${currentMonthKey}-06`;
-
-  // Candidate B: Full previous calendar month (e.g. Aug 1 to Aug 31)
-  const calStart = `${prevMonthKey}-01`;
-  const calEnd = `${prevMonthKey}-31`;
-
-  // Candidate C: Earlier cycle if current date is early in the month (e.g. Jul 7 to Aug 6)
-  const prevPrevMonthDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const prevPrevYear = prevPrevMonthDate.getFullYear();
-  const prevPrevMonth = prevPrevMonthDate.getMonth();
-  const prevPrevMonthKey = `${prevPrevYear}-${String(prevPrevMonth + 1).padStart(2, "0")}`;
-  const cycleCStart = `${prevPrevMonthKey}-07`;
-  const cycleCEnd = `${prevMonthKey}-06`;
 
   const normTxs = (transactions || []).map((tx) => ({
     ...tx,
@@ -246,57 +225,68 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     type: String(tx?.type || "expense").toLowerCase()
   }));
 
-  const evaluateRange = (startKey, endKey, monthKey, name) => {
-    const expTxs = normTxs.filter(
-      (tx) => tx.type === "expense" && tx.dateStr >= startKey && tx.dateStr <= endKey
-    );
-    const incTxs = normTxs.filter(
-      (tx) => tx.type === "income" && tx.dateStr >= startKey && tx.dateStr <= endKey
-    );
-    const totalSpent = expTxs.reduce((sum, tx) => sum + tx.amount, 0);
-    const totalIncome = incTxs.reduce((sum, tx) => sum + tx.amount, 0);
+  // Primary: 7th-to-6th cycle
+  const cycleExpenses = normTxs.filter(
+    (tx) => tx.type === "expense" && tx.dateStr >= prevCtx.startDateKey && tx.dateStr <= prevCtx.endDateKey
+  );
 
-    const recap = recaps[monthKey];
-    const allowance = Number(recap?.budget || recap?.allowance || baseAllowance || (totalIncome > 0 ? totalIncome : 0));
-    const savingsGoal = Number(recap?.savingsGoal !== undefined ? recap.savingsGoal : (settings?.savingsGoal || 0));
+  const cycleIncomes = normTxs.filter(
+    (tx) => tx.type === "income" &&
+      tx.dateStr >= prevCtx.startDateKey &&
+      tx.dateStr <= prevCtx.endDateKey &&
+      !String(tx.note || "").toLowerCase().includes("rollover")
+  );
 
-    const unspent = allowance > 0 ? Math.max(0, allowance - totalSpent) : Math.max(0, totalIncome - totalSpent);
+  const totalSpent = cycleExpenses.reduce((sum, tx) => sum + tx.amount, 0);
+  const extraIncome = cycleIncomes.reduce((sum, tx) => sum + tx.amount, 0);
 
+  // Total budget available in the previous cycle is base allowance + any extra income added
+  const totalBudget = baseAllowance + extraIncome;
+  const savingsGoal = Number(recap?.savingsGoal !== undefined ? recap.savingsGoal : (settings?.savingsGoal || 0));
+  const leftover = Math.max(0, totalBudget - totalSpent);
+
+  const monthName = new Date(prevCtx.startDateKey).toLocaleDateString("en-IN", { month: "long" });
+
+  // If user has cycle data, return the cycle result
+  if (cycleExpenses.length > 0 || extraIncome > 0 || totalBudget > 0) {
     return {
-      monthKey,
-      monthName: name,
-      startKey,
-      endKey,
+      monthKey: prevCtx.monthKey,
+      monthName,
+      startDateKey: prevCtx.startDateKey,
+      endDateKey: prevCtx.endDateKey,
       totalSpent,
-      totalIncome,
-      allowance,
+      totalIncome: extraIncome,
+      allowance: totalBudget,
       savingsGoal,
-      leftover: unspent,
-      txCount: expTxs.length,
-      hasData: expTxs.length > 0 || totalIncome > 0 || (recap && recap.totalSpent > 0)
+      leftover,
+      txCount: cycleExpenses.length,
+      hasData: cycleExpenses.length > 0 || extraIncome > 0
     };
+  }
+
+  // Fallback for users strictly tracking calendar months (1st to last day)
+  const now = new Date();
+  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const calMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
+  const calExpenses = normTxs.filter((tx) => tx.type === "expense" && tx.dateStr.startsWith(calMonthKey));
+  const calIncomes = normTxs.filter((tx) => tx.type === "income" && tx.dateStr.startsWith(calMonthKey) && !String(tx.note || "").toLowerCase().includes("rollover"));
+  const calSpent = calExpenses.reduce((sum, tx) => sum + tx.amount, 0);
+  const calExtra = calIncomes.reduce((sum, tx) => sum + tx.amount, 0);
+  const calBudget = baseAllowance + calExtra;
+
+  return {
+    monthKey: calMonthKey,
+    monthName: prevMonthDate.toLocaleDateString("en-IN", { month: "long" }),
+    startDateKey: `${calMonthKey}-01`,
+    endDateKey: `${calMonthKey}-31`,
+    totalSpent: calSpent,
+    totalIncome: calExtra,
+    allowance: calBudget,
+    savingsGoal,
+    leftover: Math.max(0, calBudget - calSpent),
+    txCount: calExpenses.length,
+    hasData: calExpenses.length > 0 || calExtra > 0
   };
-
-  const resCycleA = evaluateRange(cycleAStart, cycleAEnd, prevMonthKey, prevMonthName);
-  const resCal = evaluateRange(calStart, calEnd, prevMonthKey, prevMonthName);
-  const resCycleC = evaluateRange(cycleCStart, cycleCEnd, prevPrevMonthKey, prevPrevMonthDate.toLocaleDateString("en-IN", { month: "long" }));
-
-  // Determine the candidate that best captures the user's logged activity
-  let best = resCycleA;
-  if (best.txCount === 0 && resCal.txCount > 0) {
-    best = resCal;
-  } else if (best.txCount === 0 && now.getDate() < 7 && resCycleC.txCount > 0) {
-    best = resCycleC;
-  } else if (resCal.leftover > 0 && best.leftover === 0 && resCal.txCount > 0) {
-    best = resCal;
-  }
-
-  // Fallback to explicit savingsAchieved in recap if present
-  if (recaps[prevMonthKey]?.savingsAchieved !== undefined && recaps[prevMonthKey].savingsAchieved > 0 && best.leftover === 0) {
-    best.leftover = Number(recaps[prevMonthKey].savingsAchieved);
-  }
-
-  return best;
 }
 
 
