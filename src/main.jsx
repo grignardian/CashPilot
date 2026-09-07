@@ -2232,8 +2232,12 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
             </section>
             <section className="detail-card">
               <p>Last month leftover</p>
-              <strong>{currency(prevCycle?.leftover || 0)}</strong>
-              <small>{prevCycle?.monthName ? `${prevCycle.monthName} unspent` : "From previous cycle"}</small>
+              <strong>{currency(isRolledOver ? 0 : (prevCycle?.leftover || 0))}</strong>
+              <small>
+                {isRolledOver
+                  ? `${currency(rolloverTx?.amount || prevCycle?.leftover || 0)} added to this month`
+                  : (prevCycle?.monthName ? `${prevCycle.monthName} unspent` : "From previous cycle")}
+              </small>
 
               {(prevCycle?.leftover > 0 || isRolledOver) && (
                 <div style={{ marginTop: "10px" }}>

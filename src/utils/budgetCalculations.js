@@ -229,6 +229,20 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   const prevPeriodStartKey = `${prevCtx.monthKey}-01`;
   const prevPeriodEndKey = prevCtx.endDateKey;
 
+  // Find any rollover income added in current cycle (on or after currentStartDateKey)
+  const currentRollovers = normTxs.filter(
+    (tx) => tx.type === "income" &&
+      tx.dateStr >= currentCtx.startDateKey &&
+      String(tx.note || "").toLowerCase().includes("rollover")
+  );
+  const currentRolloverAmt = currentRollovers.reduce((sum, tx) => sum + tx.amount, 0);
+
+  // If base allowance currently includes this month's rollover, exclude it to get true previous baseline
+  let effectiveBase = baseAllowance;
+  if (currentRolloverAmt > 0 && !recap?.budget) {
+    effectiveBase = Math.max(0, baseAllowance - currentRolloverAmt);
+  }
+
   const cycleExpenses = normTxs.filter(
     (tx) => tx.type === "expense" && tx.dateStr >= prevPeriodStartKey && tx.dateStr <= prevPeriodEndKey
   );
@@ -244,13 +258,12 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   const extraIncome = cycleIncomes.reduce((sum, tx) => sum + tx.amount, 0);
 
   // Calculate total budget available in the previous cycle
-  let totalBudget = baseAllowance;
+  let totalBudget = effectiveBase;
   if (extraIncome > 0) {
     if (recap?.budget) {
       totalBudget = Number(recap.budget) + extraIncome;
-    } else if (baseAllowance > 0) {
-      // If baseAllowance already matches base + extra or base only
-      totalBudget = Math.max(baseAllowance, (settings?.allowance || 0) + extraIncome);
+    } else if (effectiveBase > 0) {
+      totalBudget = effectiveBase + extraIncome;
     } else {
       totalBudget = extraIncome;
     }
