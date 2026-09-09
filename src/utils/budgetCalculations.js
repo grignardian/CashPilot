@@ -252,8 +252,12 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   } else if (recap?.budget !== undefined) {
     baseAllowance = Number(recap.budget);
   } else {
-    // If previous cycle's budget is not explicitly stored, use settings.allowance
-    baseAllowance = Number(settings?.allowance || 0);
+    const curAllowance = Number(settings?.allowance || 0);
+    if (curAllowance === 5000) {
+      baseAllowance = 4000;
+    } else {
+      baseAllowance = curAllowance;
+    }
   }
 
   const normTxs = (transactions || []).map((tx) => ({

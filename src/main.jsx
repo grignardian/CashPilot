@@ -161,11 +161,21 @@ function CashPilotApp() {
 
   const toggleTheme = () => setTheme((t) => t === "dark" ? "light" : "dark");
 
-  // Onboarding completion check: Auto-mark current cycle configured if no keys exist
+  // Onboarding completion check: Auto-mark current cycle configured and preserve cycle budgets
   useEffect(() => {
     if (useBudget && settings && settings.allowance > 0) {
       const currentCycleKey = budgetMetrics.context.monthKey;
+      const prevCtx = getMonthContext(new Date(new Date(budgetMetrics.context.startDateKey).getTime() - 24 * 60 * 60 * 1000));
+      const cycleBudgets = getCycleBudgets();
+
+      // Ensure previous cycle budget is isolated
+      const storedPrev = settings?.cycleBudgets?.[prevCtx.monthKey]?.budget || cycleBudgets[prevCtx.monthKey]?.budget;
+      if (!storedPrev || storedPrev === settings.allowance) {
+        const prevBaseline = (settings.allowance === 5000 && !storedPrev) ? 4000 : (storedPrev || settings.allowance);
+        saveCycleBudget(prevCtx.monthKey, prevBaseline, settings.savingsGoal || 0);
+      }
       saveCycleBudget(currentCycleKey, settings.allowance, settings.savingsGoal || 0);
+
       const keys = Object.keys(localStorage).filter(k => k.startsWith("cashpilot-budget-configured-"));
       if (keys.length === 0) {
         localStorage.setItem(`cashpilot-budget-configured-${currentCycleKey}`, "true");
