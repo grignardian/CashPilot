@@ -245,7 +245,9 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   const recap = recaps[prevCtx.monthKey];
   let baseAllowance = 0;
 
-  if (cycleBudgets[prevCtx.monthKey]?.budget !== undefined) {
+  if (settings?.cycleBudgets?.[prevCtx.monthKey]?.budget !== undefined) {
+    baseAllowance = Number(settings.cycleBudgets[prevCtx.monthKey].budget);
+  } else if (cycleBudgets[prevCtx.monthKey]?.budget !== undefined) {
     baseAllowance = Number(cycleBudgets[prevCtx.monthKey].budget);
   } else if (recap?.budget !== undefined) {
     baseAllowance = Number(recap.budget);

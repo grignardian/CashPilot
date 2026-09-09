@@ -2109,6 +2109,8 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState("");
   const [rollingOver, setRollingOver] = useState(false);
+  const [editPrevBudgetOpen, setEditPrevBudgetOpen] = useState(false);
+  const [prevBudgetInput, setPrevBudgetInput] = useState("");
 
   // Check if rollover transaction from prevCycle already exists
   const rolloverTx = useMemo(() => {
@@ -2299,12 +2301,35 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
               <small>Based on the money left this month.</small>
             </section>
             <section className="detail-card">
-              <p>Last month leftover</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <p style={{ margin: 0 }}>Last month leftover</p>
+                <button
+                  type="button"
+                  title="Adjust previous month budget"
+                  onClick={() => {
+                    setPrevBudgetInput(String(prevCycle?.allowance || 4000));
+                    setEditPrevBudgetOpen(true);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-secondary)",
+                    cursor: "pointer",
+                    padding: "2px 4px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    fontSize: "11px"
+                  }}
+                >
+                  <Pencil size={12} />
+                </button>
+              </div>
               <strong>{currency(isRolledOver ? 0 : (prevCycle?.leftover || 0))}</strong>
               <small>
                 {isRolledOver
                   ? `${currency(rolloverTx?.amount || prevCycle?.leftover || 0)} added to this month`
-                  : (prevCycle?.monthName ? `${prevCycle.monthName} unspent` : "From previous cycle")}
+                  : (prevCycle?.monthName ? `${prevCycle.monthName} unspent (budget ${currency(prevCycle?.allowance || 0)})` : "From previous cycle")}
               </small>
 
               {(prevCycle?.leftover > 0 || isRolledOver) && (
@@ -2405,6 +2430,88 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
             <button className="primary-button pressable" disabled={adding || !addAmount} onClick={handleAddMoney} style={{ marginTop: "16px" }}>
               {adding ? "Adding..." : "Add to budget"}
             </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {editPrevBudgetOpen && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => setEditPrevBudgetOpen(false)}>
+          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 360px)", padding: "24px" }}>
+            <div className="modal-icon" style={{ background: "rgba(169, 141, 245, 0.15)", color: "var(--accent-light)", margin: "0 auto 12px" }}>
+              <Pencil size={20} />
+            </div>
+            <h2 style={{ fontSize: "18px", margin: "0 0 8px", textAlign: "center" }}>
+              {prevCycle?.monthName ? `${prevCycle.monthName} Budget` : "Previous Cycle Budget"}
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", textAlign: "center", margin: "0 0 16px" }}>
+              Set the baseline budget for {prevCycle?.monthName || "the previous cycle"} to calculate accurate leftover.
+            </p>
+            <label style={{ display: "block", marginBottom: "16px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Previous Month Budget</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={prevBudgetInput}
+                onChange={(e) => setPrevBudgetInput(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="4000"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text)",
+                  fontSize: "16px",
+                  boxSizing: "border-box"
+                }}
+              />
+            </label>
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "20px", background: "rgba(255,255,255,0.03)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                <span>Budget:</span>
+                <strong style={{ color: "var(--text)" }}>{currency(Number(prevBudgetInput) || 0)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                <span>Total Spent:</span>
+                <strong style={{ color: "var(--text)" }}>{currency(prevCycle?.totalSpent || 0)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: "4px", marginTop: "4px" }}>
+                <span>Resulting Leftover:</span>
+                <strong style={{ color: "var(--green)" }}>{currency(Math.max(0, (Number(prevBudgetInput) || 0) - (prevCycle?.totalSpent || 0)))}</strong>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                type="button"
+                className="primary-button pressable"
+                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text)", margin: 0, flex: 1 }}
+                onClick={() => setEditPrevBudgetOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button pressable"
+                style={{ background: "var(--accent-light)", color: "#17131f", fontWeight: "600", margin: 0, flex: 1 }}
+                onClick={() => {
+                  const val = Number(prevBudgetInput) || 0;
+                  if (prevCycle?.monthKey) {
+                    saveCycleBudget(prevCycle.monthKey, val, prevCycle?.savingsGoal || 0);
+                    updateSettings({
+                      ...settings,
+                      cycleBudgets: {
+                        ...(settings?.cycleBudgets || {}),
+                        [prevCycle.monthKey]: { budget: val, savingsGoal: prevCycle?.savingsGoal || 0 }
+                      }
+                    });
+                  }
+                  setEditPrevBudgetOpen(false);
+                }}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>,
         document.body

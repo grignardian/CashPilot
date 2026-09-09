@@ -5,7 +5,8 @@ const defaultSettings = {
   allowance: 0,
   savingsGoal: 0,
   useBudget: true,
-  hasOnboarded: false
+  hasOnboarded: false,
+  cycleBudgets: {}
 };
 
 export const defaultProfile = {
