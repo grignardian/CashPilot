@@ -53,7 +53,7 @@ import { getTierForAmount } from "./utils/calendarHeatmap";
 import { suggestCategoryAndName, getSpendingAdvice, isGeminiConfigured } from "./utils/geminiIntegration";
 import { exportDataAsJSON, exportAsCSV, downloadFile } from "./utils/dataExport";
 import { generateMonthlyRecap, saveMonthlyRecap } from "./utils/dataManagement";
-import { getMonthContext, getLastMonthLeftover, extractTxDateKey, saveCycleBudget } from "./utils/budgetCalculations";
+import { getMonthContext, getLastMonthLeftover, extractTxDateKey, saveCycleBudget, getCycleBudgets } from "./utils/budgetCalculations";
 import "./styles.css";
 
 const categories = [
@@ -2185,7 +2185,23 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
   };
 
   const update = (key, value) => {
-    updateSettings({ ...settings, [key]: Number(String(value).replace(/[^0-9]/g, "")) || 0, useBudget: true, hasOnboarded: true });
+    const numVal = Number(String(value).replace(/[^0-9]/g, "")) || 0;
+    if (key === "allowance") {
+      const currentCtx = getMonthContext();
+      const currentStartDate = new Date(currentCtx.startDateKey);
+      const prevCycleRef = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
+      const prevCtx = getMonthContext(prevCycleRef);
+      const cycleBudgets = getCycleBudgets();
+
+      // Lock previous cycle budget to the previous allowance before this edit
+      if (!cycleBudgets[prevCtx.monthKey]?.budget || cycleBudgets[prevCtx.monthKey]?.budget === settings.allowance) {
+        if (settings?.allowance > 0 && numVal !== settings.allowance) {
+          saveCycleBudget(prevCtx.monthKey, settings.allowance, settings.savingsGoal || 0);
+        }
+      }
+      saveCycleBudget(currentCtx.monthKey, numVal, settings?.savingsGoal || 0);
+    }
+    updateSettings({ ...settings, [key]: numVal, useBudget: true, hasOnboarded: true });
   };
 
   const handleAddMoney = async () => {
@@ -2424,10 +2440,25 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
     setSaving(true);
     setMessage("");
     try {
+      const newAllowance = Number(form.allowance.replace(/[^0-9]/g, "")) || 0;
+      const newSavingsGoal = Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0;
+      const currentCtx = getMonthContext();
+      const currentStartDate = new Date(currentCtx.startDateKey);
+      const prevCycleRef = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
+      const prevCtx = getMonthContext(prevCycleRef);
+      const cycleBudgets = getCycleBudgets();
+
+      if (!cycleBudgets[prevCtx.monthKey]?.budget || cycleBudgets[prevCtx.monthKey]?.budget === settings.allowance) {
+        if (settings?.allowance > 0 && newAllowance !== settings.allowance) {
+          saveCycleBudget(prevCtx.monthKey, settings.allowance, settings.savingsGoal || 0);
+        }
+      }
+      saveCycleBudget(currentCtx.monthKey, newAllowance, newSavingsGoal);
+
       await updateProfile({ name: form.name.trim() || "CashPilot Student", currency: profile.currency || "INR" });
       await updateSettings({
-        allowance: Number(form.allowance.replace(/[^0-9]/g, "")) || 0,
-        savingsGoal: Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0,
+        allowance: newAllowance,
+        savingsGoal: newSavingsGoal,
         useBudget: form.useBudget,
         hasOnboarded: true
       });

@@ -250,16 +250,8 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   } else if (recap?.budget !== undefined) {
     baseAllowance = Number(recap.budget);
   } else {
-    // If previous cycle's budget is not yet recorded, initialize it from settings
-    // so subsequent changes to settings.allowance in the current cycle won't alter past cycles.
-    const currentAllowance = Number(settings?.allowance || 0);
-    if (currentAllowance > 0) {
-      baseAllowance = currentAllowance;
-      saveCycleBudget(prevCtx.monthKey, currentAllowance, settings?.savingsGoal || 0);
-      if (cycleBudgets[currentCtx.monthKey]?.budget === undefined) {
-        saveCycleBudget(currentCtx.monthKey, currentAllowance, settings?.savingsGoal || 0);
-      }
-    }
+    // If previous cycle's budget is not explicitly stored, use settings.allowance
+    baseAllowance = Number(settings?.allowance || 0);
   }
 
   const normTxs = (transactions || []).map((tx) => ({
