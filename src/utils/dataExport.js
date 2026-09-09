@@ -8,6 +8,7 @@ import { getSplits } from "./splitTracking";
 import { getAlerts } from "./alerts";
 import { getNotifications } from "./notifications";
 import { getMonthlyRecaps } from "./dataManagement";
+import { getCycleBudgets } from "./budgetCalculations";
 
 /**
  * Export all CashPilot data as a JSON object.
@@ -36,7 +37,8 @@ export function exportDataAsJSON({ profile, transactions, accounts, goals }) {
     splits: getSplits(),
     alerts: getAlerts(),
     notifications: getNotifications(),
-    monthlyRecaps: getMonthlyRecaps()
+    monthlyRecaps: getMonthlyRecaps(),
+    cycleBudgets: getCycleBudgets()
   };
 
   return JSON.stringify(data, null, 2);
@@ -82,6 +84,11 @@ export function importDataFromJSON(jsonString) {
     if (data.monthlyRecaps && Object.keys(data.monthlyRecaps).length) {
       localStorage.setItem("cashpilot-monthly-recaps", JSON.stringify(data.monthlyRecaps));
       itemsImported += Object.keys(data.monthlyRecaps).length;
+    }
+
+    if (data.cycleBudgets && Object.keys(data.cycleBudgets).length) {
+      localStorage.setItem("cashpilot-cycle-budgets", JSON.stringify(data.cycleBudgets));
+      itemsImported += Object.keys(data.cycleBudgets).length;
     }
 
     return { success: true, message: `Imported ${itemsImported} items successfully.`, itemsImported };

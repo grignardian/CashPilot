@@ -38,7 +38,8 @@ import {
   GripVertical,
   History,
   RotateCcw,
-  CheckCircle2
+  CheckCircle2,
+  ArrowUpDown
 } from "lucide-react";
 import { AuthProvider } from "./context/AuthContext";
 import { DataProvider } from "./context/DataContext";
@@ -52,7 +53,7 @@ import { getTierForAmount } from "./utils/calendarHeatmap";
 import { suggestCategoryAndName, getSpendingAdvice, isGeminiConfigured } from "./utils/geminiIntegration";
 import { exportDataAsJSON, exportAsCSV, downloadFile } from "./utils/dataExport";
 import { generateMonthlyRecap, saveMonthlyRecap } from "./utils/dataManagement";
-import { getMonthContext, getLastMonthLeftover, extractTxDateKey } from "./utils/budgetCalculations";
+import { getMonthContext, getLastMonthLeftover, extractTxDateKey, saveCycleBudget } from "./utils/budgetCalculations";
 import "./styles.css";
 
 const categories = [
@@ -164,12 +165,13 @@ function CashPilotApp() {
   useEffect(() => {
     if (useBudget && settings && settings.allowance > 0) {
       const currentCycleKey = budgetMetrics.context.monthKey;
+      saveCycleBudget(currentCycleKey, settings.allowance, settings.savingsGoal || 0);
       const keys = Object.keys(localStorage).filter(k => k.startsWith("cashpilot-budget-configured-"));
       if (keys.length === 0) {
         localStorage.setItem(`cashpilot-budget-configured-${currentCycleKey}`, "true");
       }
     }
-  }, [useBudget, settings?.allowance, budgetMetrics.context.monthKey]);
+  }, [useBudget, settings?.allowance, settings?.savingsGoal, budgetMetrics.context.monthKey]);
 
   // Budget cycle auto-reset/rollover check starting on 7th
   useEffect(() => {
@@ -205,6 +207,9 @@ function CashPilotApp() {
         localStorage.setItem(`cashpilot-rollover-${lastMonth.monthKey}`, "true");
       }
 
+      const currentCycleKey = budgetMetrics.context.monthKey;
+      saveCycleBudget(currentCycleKey, newAllowance + rolloverAmt, newSavingsGoal);
+
       // Update allowance settings with rollover included
       await updateSettings({
         ...settings,
@@ -215,7 +220,6 @@ function CashPilotApp() {
       });
 
       // Mark cycle configured
-      const currentCycleKey = budgetMetrics.context.monthKey;
       localStorage.setItem(`cashpilot-budget-configured-${currentCycleKey}`, "true");
       
       setShowResetModal(false);
@@ -1533,6 +1537,7 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isLongPressing, setIsLongPressing] = useState(false);
+  const [pendingReorder, setPendingReorder] = useState(null);
 
   const longPressTimerRef = React.useRef(null);
   const startPosRef = React.useRef({ x: 0, y: 0 });
@@ -1694,18 +1699,26 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
       }
 
       if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
-        const updatedList = [...filtered];
-        const [moved] = updatedList.splice(draggedIndex, 1);
-        updatedList.splice(dragOverIndex, 0, moved);
+        const sourceItem = filtered[draggedIndex];
+        const targetItem = filtered[dragOverIndex];
 
-        const newOrderIds = updatedList.map((item) => item.id);
-        const otherIds = customOrder.filter((id) => !newOrderIds.includes(id));
-        const finalIds = [...newOrderIds, ...otherIds];
+        if (sourceItem && targetItem) {
+          const updatedList = [...filtered];
+          const [moved] = updatedList.splice(draggedIndex, 1);
+          updatedList.splice(dragOverIndex, 0, moved);
 
-        setCustomOrder(finalIds);
-        try {
-          localStorage.setItem("cashpilot-expense-order", JSON.stringify(finalIds));
-        } catch (_) {}
+          const newOrderIds = updatedList.map((item) => item.id);
+          const otherIds = customOrder.filter((id) => !newOrderIds.includes(id));
+          const finalIds = [...newOrderIds, ...otherIds];
+
+          setPendingReorder({
+            item: moved,
+            targetItem,
+            fromIndex: draggedIndex,
+            toIndex: dragOverIndex,
+            finalIds,
+          });
+        }
       }
 
       setDraggedIndex(null);
@@ -1903,6 +1916,45 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
                   No split records found.
                 </p>
               )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {pendingReorder && createPortal(
+        <div className="modal-backdrop" onMouseDown={() => setPendingReorder(null)}>
+          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 340px)", textAlign: "center", padding: "24px" }}>
+            <div className="modal-icon" style={{ background: "rgba(169, 141, 245, 0.15)", color: "var(--accent-light)", margin: "0 auto" }}>
+              <ArrowUpDown size={20} />
+            </div>
+            <h2 style={{ fontSize: "19px", margin: "14px 0 8px", fontWeight: "700" }}>Confirm reorder?</h2>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5", margin: "0 0 20px" }}>
+              Move <strong style={{ color: "var(--text)" }}>{pendingReorder.item.title}</strong> {pendingReorder.fromIndex < pendingReorder.toIndex ? "below" : "above"} <strong style={{ color: "var(--text)" }}>{pendingReorder.targetItem.title}</strong>?
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                type="button"
+                className="primary-button pressable"
+                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text)", margin: 0, flex: 1, padding: "10px 14px", fontSize: "14px" }}
+                onClick={() => setPendingReorder(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button pressable"
+                style={{ background: "var(--accent-light)", color: "#17131f", fontWeight: "600", margin: 0, flex: 1, padding: "10px 14px", fontSize: "14px" }}
+                onClick={() => {
+                  setCustomOrder(pendingReorder.finalIds);
+                  try {
+                    localStorage.setItem("cashpilot-expense-order", JSON.stringify(pendingReorder.finalIds));
+                  } catch (_) {}
+                  setPendingReorder(null);
+                }}
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>,

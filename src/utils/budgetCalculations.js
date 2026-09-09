@@ -188,6 +188,37 @@ export function extractTxDateKey(tx) {
 }
 
 /**
+ * Retrieve saved cycle budget history.
+ * @returns {object} Keyed by monthKey "YYYY-MM"
+ */
+export function getCycleBudgets() {
+  try {
+    return JSON.parse(localStorage.getItem("cashpilot-cycle-budgets") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save budget targets for a specific monthly cycle.
+ * @param {string} monthKey - "YYYY-MM" format
+ * @param {number} budget - Monthly allowance
+ * @param {number} [savingsGoal=0] - Savings target
+ */
+export function saveCycleBudget(monthKey, budget, savingsGoal = 0) {
+  if (!monthKey) return;
+  const budgets = getCycleBudgets();
+  budgets[monthKey] = {
+    budget: Number(budget || 0),
+    savingsGoal: Number(savingsGoal || 0),
+    updatedAt: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem("cashpilot-cycle-budgets", JSON.stringify(budgets));
+  } catch { /* ignore */ }
+}
+
+/**
  * Get last month's leftover balance and summary.
  * Accurately computes unspent money from the previous period (from the 1st of previous month up to the 6th of current month).
  * @param {Array} transactions - All user transactions
@@ -200,6 +231,8 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   const prevCycleRef = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
   const prevCtx = getMonthContext(prevCycleRef);
 
+  const cycleBudgets = getCycleBudgets();
+
   // Read saved recaps if present
   let recaps = {};
   try {
@@ -208,14 +241,25 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     recaps = {};
   }
 
-  // Baseline monthly allowance
+  // Baseline monthly allowance for previous cycle
   const recap = recaps[prevCtx.monthKey];
-  let baseAllowance = Number(recap?.budget || settings?.allowance || 0);
-  if (!baseAllowance) {
-    try {
-      const saved = JSON.parse(localStorage.getItem("cashpilot-student-settings") || "{}");
-      baseAllowance = Number(saved?.allowance || 0);
-    } catch { /* ignore */ }
+  let baseAllowance = 0;
+
+  if (cycleBudgets[prevCtx.monthKey]?.budget !== undefined) {
+    baseAllowance = Number(cycleBudgets[prevCtx.monthKey].budget);
+  } else if (recap?.budget !== undefined) {
+    baseAllowance = Number(recap.budget);
+  } else {
+    // If previous cycle's budget is not yet recorded, initialize it from settings
+    // so subsequent changes to settings.allowance in the current cycle won't alter past cycles.
+    const currentAllowance = Number(settings?.allowance || 0);
+    if (currentAllowance > 0) {
+      baseAllowance = currentAllowance;
+      saveCycleBudget(prevCtx.monthKey, currentAllowance, settings?.savingsGoal || 0);
+      if (cycleBudgets[currentCtx.monthKey]?.budget === undefined) {
+        saveCycleBudget(currentCtx.monthKey, currentAllowance, settings?.savingsGoal || 0);
+      }
+    }
   }
 
   const normTxs = (transactions || []).map((tx) => ({
@@ -239,7 +283,7 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
 
   // If base allowance currently includes this month's rollover, exclude it to get true previous baseline
   let effectiveBase = baseAllowance;
-  if (currentRolloverAmt > 0 && !recap?.budget) {
+  if (currentRolloverAmt > 0 && !recap?.budget && !cycleBudgets[prevCtx.monthKey]?.budget) {
     effectiveBase = Math.max(0, baseAllowance - currentRolloverAmt);
   }
 
@@ -260,7 +304,9 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   // Calculate total budget available in the previous cycle
   let totalBudget = effectiveBase;
   if (extraIncome > 0) {
-    if (recap?.budget) {
+    if (cycleBudgets[prevCtx.monthKey]?.budget) {
+      totalBudget = Number(cycleBudgets[prevCtx.monthKey].budget) + extraIncome;
+    } else if (recap?.budget) {
       totalBudget = Number(recap.budget) + extraIncome;
     } else if (effectiveBase > 0) {
       totalBudget = effectiveBase + extraIncome;
@@ -269,7 +315,10 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     }
   }
 
-  const savingsGoal = Number(recap?.savingsGoal !== undefined ? recap.savingsGoal : (settings?.savingsGoal || 0));
+  const prevSavingsGoal = cycleBudgets[prevCtx.monthKey]?.savingsGoal !== undefined
+    ? Number(cycleBudgets[prevCtx.monthKey].savingsGoal)
+    : Number(recap?.savingsGoal !== undefined ? recap.savingsGoal : (settings?.savingsGoal || 0));
+
   const leftover = Math.max(0, totalBudget - totalSpent);
 
   const monthName = new Date(prevCtx.startDateKey).toLocaleDateString("en-IN", { month: "long" });
@@ -282,7 +331,7 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     totalSpent,
     totalIncome: extraIncome,
     allowance: totalBudget,
-    savingsGoal,
+    savingsGoal: prevSavingsGoal,
     leftover,
     txCount: cycleExpenses.length,
     hasData: cycleExpenses.length > 0 || extraIncome > 0 || totalBudget > 0
