@@ -168,11 +168,10 @@ function CashPilotApp() {
       const prevCtx = getMonthContext(new Date(new Date(budgetMetrics.context.startDateKey).getTime() - 24 * 60 * 60 * 1000));
       const cycleBudgets = getCycleBudgets();
 
-      // Ensure previous cycle budget is isolated
+      // Ensure previous cycle budget is recorded
       const storedPrev = settings?.cycleBudgets?.[prevCtx.monthKey]?.budget || cycleBudgets[prevCtx.monthKey]?.budget;
-      if (!storedPrev || storedPrev === settings.allowance) {
-        const prevBaseline = (settings.allowance === 5000 && !storedPrev) ? 4000 : (storedPrev || settings.allowance);
-        saveCycleBudget(prevCtx.monthKey, prevBaseline, settings.savingsGoal || 0);
+      if (!storedPrev) {
+        saveCycleBudget(prevCtx.monthKey, settings.allowance, settings.savingsGoal || 0);
       }
       saveCycleBudget(currentCycleKey, settings.allowance, settings.savingsGoal || 0);
 
