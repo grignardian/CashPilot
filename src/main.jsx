@@ -2807,24 +2807,6 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
               )}
             </div>
 
-            <div className="leftover-section">
-              <div className="leftover-section-title">
-                <h3>Recent entries</h3>
-                <span>{previousCycleDetails.expenses.length} expenses</span>
-              </div>
-              {previousCycleDetails.expenses.slice(0, 5).map((tx) => (
-                <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
-                  <div>
-                    <strong>{tx.title || tx.note || tx.category || "Expense"}</strong>
-                    <small>{formatDate(tx.dateStr)} · {tx.category || "Other"}</small>
-                  </div>
-                  <b>{currency(tx.amount)}</b>
-                </div>
-              ))}
-              {previousCycleDetails.expenses.length === 0 && (
-                <p className="leftover-empty">Nothing to show yet.</p>
-              )}
-            </div>
           </div>
         </div>,
         document.body
