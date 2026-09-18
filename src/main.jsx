@@ -1322,7 +1322,7 @@ function DateInput({ value, onChange }) {
   );
 }
 
-function CustomDropdown({ value, options, onChange }) {
+function CustomDropdown({ value, options, onChange, portalClassName = "" }) {
   const [open, setOpen] = useState(false);
 
   // Support both string[] and object[] (with .name, .icon, .color)
@@ -1355,7 +1355,7 @@ function CustomDropdown({ value, options, onChange }) {
         <Tags className="custom-dropdown-chevron" size={16} />
       </button>
       {open && createPortal(
-        <div className="custom-dropdown-backdrop" onMouseDown={() => setOpen(false)}>
+        <div className={`custom-dropdown-backdrop ${portalClassName}`} onMouseDown={() => setOpen(false)}>
           <div className="custom-dropdown-menu" onMouseDown={(e) => e.stopPropagation()}>
             {options.map((opt) => {
               const norm = normalize(opt);
@@ -2738,6 +2738,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
                   value={leftoverSpendForm.category}
                   options={categories}
                   onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, category: val }))}
+                  portalClassName="modal-dropdown-layer"
                 />
                 <input
                   value={leftoverSpendForm.note}
@@ -3245,12 +3246,25 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
     }, {});
   }, [expenses]);
 
-  const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const viewCycle = useMemo(() => {
+    const toDateKey = (date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const start = new Date(year, month, 7);
+    const endExclusive = new Date(year, month + 1, 7);
+    const endDisplay = new Date(year, month + 1, 6);
+
+    return {
+      startKey: toDateKey(start),
+      endExclusiveKey: toDateKey(endExclusive),
+      label: `${start.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} - ${endDisplay.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+    };
+  }, [year, month]);
+
   const viewMonthTotal = useMemo(() => {
     return (expenses || [])
-      .filter((exp) => exp.type === "expense" && exp.date && exp.date.startsWith(viewMonthPrefix))
+      .filter((exp) => exp.type === "expense" && exp.date && exp.date >= viewCycle.startKey && exp.date < viewCycle.endExclusiveKey)
       .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  }, [expenses, viewMonthPrefix]);
+  }, [expenses, viewCycle]);
 
   const prevMonth = () => {
     const d = new Date(year, month - 1, 1);
@@ -3290,7 +3304,7 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
             <div style={{ flex: 1, textAlign: "center" }}>
               <h2 style={{ margin: 0, fontSize: "17px", fontWeight: "600" }}>{monthName}</h2>
               <span style={{ fontSize: "12px", color: viewMonthTotal > 0 ? "var(--accent-light)" : "var(--text-secondary)" }}>
-                {currency(viewMonthTotal)} spent
+                {currency(viewMonthTotal)} spent · {viewCycle.label}
               </span>
             </div>
             <button type="button" className="datepicker-nav pressable" onClick={nextMonth} aria-label="Next month">›</button>
