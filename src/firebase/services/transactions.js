@@ -74,7 +74,9 @@ export function getTransactions(userId, filters = {}, next, error) {
   if (filters.goalId) constraints.push(where("goalId", "==", filters.goalId));
   if (filters.type) constraints.push(where("type", "==", filters.type));
   constraints.push(orderBy("date", "desc"));
-  constraints.push(firestoreLimit(filters.limit || 50));
+  if (filters.limit && filters.limit > 0) {
+    constraints.push(firestoreLimit(filters.limit));
+  }
 
   return onSnapshot(
     query(transactionsRef(userId), ...constraints),

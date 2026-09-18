@@ -257,7 +257,11 @@ function CashPilotApp() {
     }
   }, [dueItems.length]);
 
-  const expenses = useMemo(() => transactions.map(transactionToExpense), [transactions]);
+  const expenses = useMemo(() => {
+    return transactions
+      .map(transactionToExpense)
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }, [transactions]);
 
   const totals = useMemo(() => {
     const todayKey = today();
@@ -525,7 +529,14 @@ function CashPilotApp() {
 }
 
 function transactionToExpense(tx) {
-  const [title, note] = String(tx.note || tx.category || "Expense").split(" · ");
+  const titleFromTx = tx.title || tx.name;
+  let title = titleFromTx;
+  let note = tx.note || "";
+  if (!title) {
+    const parts = String(tx.note || tx.category || "Expense").split(" · ");
+    title = parts[0] || tx.category || "Expense";
+    note = parts.slice(1).join(" · ");
+  }
   return {
     id: tx.id,
     title: title || tx.category || "Expense",
@@ -2779,12 +2790,26 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
 }
 
 function CalendarGraphs({ totals, expenses, viewMonth }) {
-  const parseTarget = viewMonth ? new Date(`${viewMonth}-01T00:00:00`) : new Date();
-  const year = parseTarget.getFullYear();
-  const month = parseTarget.getMonth();
+  const [year, month] = useMemo(() => {
+    const parts = (viewMonth || "").split("-");
+    if (parts.length === 2) {
+      return [parseInt(parts[0], 10), parseInt(parts[1], 10) - 1];
+    }
+    const now = new Date();
+    return [now.getFullYear(), now.getMonth()];
+  }, [viewMonth]);
+
+  const parseTarget = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const allByDate = totals.allByDate || totals.byDate || {};
+  const allByDate = useMemo(() => {
+    return (expenses || []).reduce((map, item) => {
+      if (item.type === "expense" && item.date) {
+        map[item.date] = (map[item.date] || 0) + Number(item.amount || 0);
+      }
+      return map;
+    }, {});
+  }, [expenses]);
 
   // Daily spending bar chart data for viewed month
   const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
@@ -2896,9 +2921,21 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
   const [selectedDate, setSelectedDate] = useState(null);
   const [closing, setClosing] = useState(false);
 
-  const monthDate = new Date(`${viewMonth}-01T00:00:00`);
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
+  const [year, month] = useMemo(() => {
+    const parts = (viewMonth || "").split("-");
+    if (parts.length === 2) {
+      return [parseInt(parts[0], 10), parseInt(parts[1], 10) - 1];
+    }
+    const now = new Date();
+    return [now.getFullYear(), now.getMonth()];
+  }, [viewMonth]);
+
+  const currentMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  const monthDate = new Date(year, month, 1);
   const monthName = monthDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -2907,7 +2944,21 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
     ...Array.from({ length: daysInMonth }, (_, index) => index + 1)
   ];
 
-  const allByDate = totals.allByDate || totals.byDate || {};
+  const allByDate = useMemo(() => {
+    return (expenses || []).reduce((map, item) => {
+      if (item.type === "expense" && item.date) {
+        map[item.date] = (map[item.date] || 0) + Number(item.amount || 0);
+      }
+      return map;
+    }, {});
+  }, [expenses]);
+
+  const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const viewMonthTotal = useMemo(() => {
+    return (expenses || [])
+      .filter((exp) => exp.type === "expense" && exp.date && exp.date.startsWith(viewMonthPrefix))
+      .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  }, [expenses, viewMonthPrefix]);
 
   const prevMonth = () => {
     const d = new Date(year, month - 1, 1);
@@ -2941,10 +2992,27 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
       </section>
 
       <section className="calendar-shell">
-        <div className="calendar-head" style={{ flexDirection: "row", alignItems: "center" }}>
-          <button type="button" className="datepicker-nav pressable" onClick={prevMonth}>‹</button>
-          <h2 style={{ flex: 1, textAlign: "center", fontSize: "17px" }}>{monthName}</h2>
-          <button type="button" className="datepicker-nav pressable" onClick={nextMonth}>›</button>
+        <div className="calendar-head" style={{ flexDirection: "column", alignItems: "center", gap: "6px" }}>
+          <div style={{ display: "flex", width: "100%", alignItems: "center" }}>
+            <button type="button" className="datepicker-nav pressable" onClick={prevMonth} aria-label="Previous month">‹</button>
+            <div style={{ flex: 1, textAlign: "center" }}>
+              <h2 style={{ margin: 0, fontSize: "17px", fontWeight: "600" }}>{monthName}</h2>
+              <span style={{ fontSize: "12px", color: viewMonthTotal > 0 ? "var(--accent-light)" : "var(--text-secondary)" }}>
+                {currency(viewMonthTotal)} spent
+              </span>
+            </div>
+            <button type="button" className="datepicker-nav pressable" onClick={nextMonth} aria-label="Next month">›</button>
+          </div>
+          {viewMonth !== currentMonthKey && (
+            <button
+              type="button"
+              className="dark-pill pressable"
+              style={{ fontSize: "11px", padding: "3px 10px", color: "var(--accent-light)", background: "rgba(124, 92, 191, 0.15)", border: "1px solid rgba(124, 92, 191, 0.3)" }}
+              onClick={() => setViewMonth(currentMonthKey)}
+            >
+              Back to current month
+            </button>
+          )}
         </div>
 
         <div className="weekday-row">

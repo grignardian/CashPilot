@@ -78,7 +78,7 @@ export function DataProvider({ children }) {
       getSummary(user.uid, setSummary, handleError),
       getRecurring(user.uid, setRecurring, handleError),
       getSplits(user.uid, setSplits, handleError),
-      getTransactions(user.uid, { limit: 100 }, (items) => {
+      getTransactions(user.uid, {}, (items) => {
         setTransactions(items);
         setLoadingData(false);
       }, handleError)

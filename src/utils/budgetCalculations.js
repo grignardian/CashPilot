@@ -178,9 +178,26 @@ export function extractTxDateKey(tx) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     } catch { /* ignore */ }
   }
+  if (tx.createdAt && typeof tx.createdAt.toDate === "function") {
+    try {
+      const d = tx.createdAt.toDate();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    } catch { /* ignore */ }
+  }
   if (tx.createdAt && typeof tx.createdAt.seconds === "number") {
     try {
       const d = new Date(tx.createdAt.seconds * 1000);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    } catch { /* ignore */ }
+  }
+  if (tx.date instanceof Date) {
+    try {
+      return `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, "0")}-${String(tx.date.getDate()).padStart(2, "0")}`;
+    } catch { /* ignore */ }
+  }
+  if (typeof tx.date === "number" && tx.date > 0) {
+    try {
+      const d = new Date(tx.date > 1e11 ? tx.date : tx.date * 1000);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     } catch { /* ignore */ }
   }
