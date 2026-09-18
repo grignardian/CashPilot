@@ -269,7 +269,7 @@ function CashPilotApp() {
 
     // Only count expense-type transactions from the current month/cycle
     const monthExpenses = expenses.filter(
-      (item) => item.type === "expense" && item.date >= startDateKey && item.date <= endDateKey
+      (item) => item.type === "expense" && item.budgetSource !== "leftover" && item.date >= startDateKey && item.date <= endDateKey
     );
 
     const spent = monthExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -544,7 +544,9 @@ function transactionToExpense(tx) {
     category: tx.category || "Other",
     date: extractTxDateKey(tx) || today(),
     note: note || "",
-    type: tx.type
+    type: tx.type,
+    budgetSource: tx.budgetSource || "",
+    leftoverMonthKey: tx.leftoverMonthKey || ""
   };
 }
 
@@ -2132,6 +2134,14 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
   const [editPrevBudgetOpen, setEditPrevBudgetOpen] = useState(false);
   const [leftoverDetailsOpen, setLeftoverDetailsOpen] = useState(false);
   const [prevBudgetInput, setPrevBudgetInput] = useState("");
+  const [leftoverSpendForm, setLeftoverSpendForm] = useState({
+    title: "",
+    amount: "",
+    category: "Other",
+    note: ""
+  });
+  const [leftoverSpendMsg, setLeftoverSpendMsg] = useState("");
+  const [addingLeftoverSpend, setAddingLeftoverSpend] = useState(false);
 
   const previousCycleDetails = useMemo(() => {
     if (!prevCycle?.startDateKey || !prevCycle?.endDateKey) {
@@ -2139,6 +2149,9 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
         expenses: [],
         incomes: [],
         categoryBreakdown: [],
+        leftoverSpends: [],
+        leftoverSpent: 0,
+        remainingLeftover: 0,
         remainingAfterSavings: 0
       };
     }
@@ -2160,6 +2173,17 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
       .filter((tx) => tx.type === "income" && !String(tx.note || "").toLowerCase().includes("rollover"))
       .sort((a, b) => String(b.dateStr).localeCompare(String(a.dateStr)));
 
+    const leftoverSpends = (transactions || [])
+      .map((tx) => ({
+        ...tx,
+        dateStr: extractTxDateKey(tx),
+        amount: Number(tx?.amount || 0),
+        type: String(tx?.type || "expense").toLowerCase()
+      }))
+      .filter((tx) => tx.type === "expense" && tx.budgetSource === "leftover" && tx.leftoverMonthKey === prevCycle.monthKey)
+      .sort((a, b) => String(b.dateStr).localeCompare(String(a.dateStr)));
+
+    const leftoverSpent = leftoverSpends.reduce((sum, tx) => sum + tx.amount, 0);
     const byCategory = expenses.reduce((acc, tx) => {
       const name = tx.category || "Other";
       if (!acc[name]) {
@@ -2178,12 +2202,16 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
     }, {});
 
     const categoryBreakdown = Object.values(byCategory).sort((a, b) => b.total - a.total);
-    const remainingAfterSavings = Math.max(0, Number(prevCycle?.leftover || 0) - Number(prevCycle?.savingsGoal || 0));
+    const remainingLeftover = Math.max(0, Number(prevCycle?.leftover || 0) - leftoverSpent);
+    const remainingAfterSavings = Math.max(0, remainingLeftover - Number(prevCycle?.savingsGoal || 0));
 
     return {
       expenses,
       incomes,
       categoryBreakdown,
+      leftoverSpends,
+      leftoverSpent,
+      remainingLeftover,
       remainingAfterSavings
     };
   }, [transactions, prevCycle]);
@@ -2206,10 +2234,10 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
   );
 
   const handleAddRollover = async () => {
-    if (!prevCycle || prevCycle.leftover <= 0 || rollingOver) return;
+    if (!prevCycle || previousCycleDetails.remainingLeftover <= 0 || rollingOver) return;
     setRollingOver(true);
     try {
-      const amt = Math.round(prevCycle.leftover);
+      const amt = Math.round(previousCycleDetails.remainingLeftover);
       await addTransaction({
         amount: amt,
         type: "income",
@@ -2306,6 +2334,38 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
       setAddMsg("Could not add money. Try again.");
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleAddLeftoverSpend = async () => {
+    const amount = Number(leftoverSpendForm.amount);
+    if (!prevCycle?.monthKey || !amount || amount <= 0 || addingLeftoverSpend) return;
+
+    if (amount > previousCycleDetails.remainingLeftover) {
+      setLeftoverSpendMsg(`Only ${currency(previousCycleDetails.remainingLeftover)} is available in leftover.`);
+      return;
+    }
+
+    setAddingLeftoverSpend(true);
+    setLeftoverSpendMsg("");
+    try {
+      await addTransaction({
+        amount,
+        type: "expense",
+        category: leftoverSpendForm.category || "Other",
+        accountId: accounts?.[0]?.id || "",
+        budgetSource: "leftover",
+        leftoverMonthKey: prevCycle.monthKey,
+        note: [leftoverSpendForm.title || "Leftover spend", leftoverSpendForm.note].filter(Boolean).join(" · "),
+        dateKey: today()
+      });
+      setLeftoverSpendMsg(`Spent ${currency(amount)} from leftover.`);
+      setLeftoverSpendForm({ title: "", amount: "", category: "Other", note: "" });
+    } catch (error) {
+      console.error(error);
+      setLeftoverSpendMsg("Could not add leftover spend. Try again.");
+    } finally {
+      setAddingLeftoverSpend(false);
     }
   };
 
@@ -2413,11 +2473,11 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
                   <Pencil size={12} />
                 </button>
               </div>
-              <strong>{currency(isRolledOver ? 0 : (prevCycle?.leftover || 0))}</strong>
+              <strong>{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</strong>
               <small>
                 {isRolledOver
                   ? `${currency(rolloverTx?.amount || prevCycle?.leftover || 0)} added to this month`
-                  : (prevCycle?.monthName ? `${prevCycle.monthName} unspent (budget ${currency(prevCycle?.allowance || 0)})` : "From previous cycle")}
+                  : (prevCycle?.monthName ? `${prevCycle.monthName} unspent · ${currency(previousCycleDetails.leftoverSpent)} used` : "From previous cycle")}
               </small>
               <span className="leftover-view-link">
                 View segregated details <ChevronRight size={12} />
@@ -2632,8 +2692,11 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
 
             <div className="leftover-total-card">
               <span>{isRolledOver ? "Already added to this month" : "Available leftover"}</span>
-              <strong>{currency(isRolledOver ? 0 : (prevCycle?.leftover || 0))}</strong>
+              <strong>{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</strong>
               {isRolledOver && <small>{currency(rolloverTx?.amount || prevCycle?.leftover || 0)} was rolled over.</small>}
+              {!isRolledOver && previousCycleDetails.leftoverSpent > 0 && (
+                <small>{currency(previousCycleDetails.leftoverSpent)} already assigned to leftover spends.</small>
+              )}
             </div>
 
             <div className="leftover-metrics-grid">
@@ -2650,9 +2713,48 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
                 <strong>{currency(prevCycle?.savingsGoal || 0)}</strong>
               </div>
               <div>
-                <span>Extra income</span>
-                <strong>{currency(prevCycle?.totalIncome || 0)}</strong>
+                <span>Used from leftover</span>
+                <strong>{currency(previousCycleDetails.leftoverSpent)}</strong>
               </div>
+            </div>
+
+            <div className="leftover-spend-box">
+              <div className="leftover-section-title">
+                <h3>Spend from leftover</h3>
+                <span>{isRolledOver ? "Rolled over" : `${currency(previousCycleDetails.remainingLeftover)} left`}</span>
+              </div>
+              <div className="leftover-spend-form">
+                <input
+                  value={leftoverSpendForm.title}
+                  onChange={(event) => setLeftoverSpendForm((form) => ({ ...form, title: event.target.value }))}
+                  placeholder="Spend name"
+                  disabled={isRolledOver}
+                />
+                <AmountInput
+                  value={leftoverSpendForm.amount}
+                  onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, amount: val }))}
+                />
+                <CustomDropdown
+                  value={leftoverSpendForm.category}
+                  options={categories}
+                  onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, category: val }))}
+                />
+                <input
+                  value={leftoverSpendForm.note}
+                  onChange={(event) => setLeftoverSpendForm((form) => ({ ...form, note: event.target.value }))}
+                  placeholder="Note"
+                  disabled={isRolledOver}
+                />
+              </div>
+              {leftoverSpendMsg && <p className="leftover-form-message">{leftoverSpendMsg}</p>}
+              <button
+                type="button"
+                className="primary-button pressable"
+                disabled={isRolledOver || addingLeftoverSpend || !leftoverSpendForm.amount || previousCycleDetails.remainingLeftover <= 0}
+                onClick={handleAddLeftoverSpend}
+              >
+                {addingLeftoverSpend ? "Adding..." : "Use leftover for this spend"}
+              </button>
             </div>
 
             <div className="leftover-section">
@@ -2682,6 +2784,25 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
                 })
               ) : (
                 <p className="leftover-empty">No expenses were logged in this cycle.</p>
+              )}
+            </div>
+
+            <div className="leftover-section">
+              <div className="leftover-section-title">
+                <h3>Leftover spends</h3>
+                <span>{previousCycleDetails.leftoverSpends.length} entries</span>
+              </div>
+              {previousCycleDetails.leftoverSpends.map((tx) => (
+                <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
+                  <div>
+                    <strong>{tx.title || String(tx.note || "").split(" · ")[0] || tx.category || "Leftover spend"}</strong>
+                    <small>{formatDate(tx.dateStr)} · {tx.category || "Other"}</small>
+                  </div>
+                  <b>{currency(tx.amount)}</b>
+                </div>
+              ))}
+              {previousCycleDetails.leftoverSpends.length === 0 && (
+                <p className="leftover-empty">No spends assigned to leftover yet.</p>
               )}
             </div>
 

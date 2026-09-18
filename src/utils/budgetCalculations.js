@@ -137,7 +137,7 @@ export function sumExpensesForMonth(transactions, monthKey) {
   const endKey = formatDate(endDate);
 
   return transactions
-    .filter((tx) => tx.type === "expense" && tx.dateKey >= startKey && tx.dateKey <= endKey)
+    .filter((tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && tx.dateKey >= startKey && tx.dateKey <= endKey)
     .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 }
 
@@ -149,7 +149,7 @@ export function sumExpensesForMonth(transactions, monthKey) {
  */
 export function sumExpensesForDate(transactions, dateKey) {
   return transactions
-    .filter((tx) => tx.type === "expense" && tx.dateKey === dateKey)
+    .filter((tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && tx.dateKey === dateKey)
     .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 }
 
@@ -324,5 +324,4 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     hasData: cycleExpenses.length > 0 || totalBudget > 0
   };
 }
-
 

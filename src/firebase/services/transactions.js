@@ -44,6 +44,8 @@ export async function addTransaction(userId, txData) {
       category: txData.category || "Other",
       accountId: txData.accountId || "",
       goalId: txData.goalId || "",
+      budgetSource: txData.budgetSource || "",
+      leftoverMonthKey: txData.leftoverMonthKey || "",
       note: txData.note || "",
       date: serverTimestamp(),
       dateKey: txData.dateKey || txData.date || "",
