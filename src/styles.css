@@ -1073,6 +1073,12 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   width: min(100%, 420px);
   max-height: min(82vh, 720px);
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.leftover-detail-modal::-webkit-scrollbar {
+  display: none;
 }
 
 .leftover-total-card {
