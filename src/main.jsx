@@ -1565,16 +1565,21 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
   const startPosRef = React.useRef({ x: 0, y: 0 });
   const listRef = React.useRef(null);
 
+  const recordExpenses = useMemo(
+    () => expenses.filter((expense) => expense.budgetSource !== "leftover"),
+    [expenses]
+  );
+
   // Apply custom order to expenses
   const orderedExpenses = useMemo(() => {
-    if (!customOrder || customOrder.length === 0) return expenses;
+    if (!customOrder || customOrder.length === 0) return recordExpenses;
 
     const orderMap = new Map();
     customOrder.forEach((id, idx) => {
       orderMap.set(id, idx);
     });
 
-    return [...expenses].sort((a, b) => {
+    return [...recordExpenses].sort((a, b) => {
       const hasA = orderMap.has(a.id);
       const hasB = orderMap.has(b.id);
       if (hasA && hasB) {
@@ -1584,7 +1589,7 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
       if (hasA && !hasB) return 1;
       return 0;
     });
-  }, [expenses, customOrder]);
+  }, [recordExpenses, customOrder]);
 
   const filtered = orderedExpenses.filter((item) =>
     `${item.title} ${item.category} ${item.note}`.toLowerCase().includes(query.toLowerCase())
