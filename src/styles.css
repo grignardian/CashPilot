@@ -2461,29 +2461,77 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* === Category Horizontal Bar Chart === */
 .category-bar-chart {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding-top: 8px;
 }
 
 .category-bar-row {
-  display: grid;
-  grid-template-columns: 70px 1fr 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.category-bar-header {
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.category-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.category-bar-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #151515;
+  flex-shrink: 0;
 }
 
 .category-bar-name {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-bar-values {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.category-bar-amount {
+  font-family: var(--font-serif);
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
 
+.category-bar-pct {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
 .category-bar-track {
-  height: 8px;
+  height: 6px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
+  width: 100%;
 }
 
 .category-bar-fill {
@@ -2495,13 +2543,6 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 @keyframes growWidth {
   from { width: 0 !important; }
-}
-
-.category-bar-pct {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-align: right;
 }
 
 /* === Balance Eye Toggle === */

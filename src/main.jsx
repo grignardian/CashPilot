@@ -1566,7 +1566,7 @@ function RecordsScreen({ query, setQuery, expenses, onDelete, onEdit, onAdd, spl
   const listRef = React.useRef(null);
 
   const recordExpenses = useMemo(
-    () => expenses.filter((expense) => expense.budgetSource !== "leftover"),
+    () => (expenses || []).filter((expense) => expense.type === "expense" && expense.budgetSource !== "leftover" && !expense.leftoverMonthKey),
     [expenses]
   );
 
@@ -3082,14 +3082,20 @@ function CalendarGraphs({ totals, expenses, viewMonth }) {
   const parseTarget = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+  const calendarExpenses = useMemo(() => {
+    return (expenses || []).filter(
+      (item) => item.type === "expense" && item.budgetSource !== "leftover" && !item.leftoverMonthKey
+    );
+  }, [expenses]);
+
   const allByDate = useMemo(() => {
-    return (expenses || []).reduce((map, item) => {
-      if (item.type === "expense" && item.date) {
+    return calendarExpenses.reduce((map, item) => {
+      if (item.date) {
         map[item.date] = (map[item.date] || 0) + Number(item.amount || 0);
       }
       return map;
     }, {});
-  }, [expenses]);
+  }, [calendarExpenses]);
 
   // Daily spending bar chart data for viewed month
   const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
@@ -3101,8 +3107,8 @@ function CalendarGraphs({ totals, expenses, viewMonth }) {
 
   // Category split for viewed month
   const viewedMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const viewedMonthExpenses = expenses.filter(
-    (exp) => exp.type === "expense" && exp.date && exp.date.startsWith(viewedMonthPrefix)
+  const viewedMonthExpenses = calendarExpenses.filter(
+    (exp) => exp.date && exp.date.startsWith(viewedMonthPrefix)
   );
 
   const catData = categories.map((cat) => ({
@@ -3123,8 +3129,8 @@ function CalendarGraphs({ totals, expenses, viewMonth }) {
     const endDateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(wEndDay).padStart(2, "0")}`;
 
     let weekTotal = 0;
-    expenses.forEach((exp) => {
-      if (exp.type === "expense" && exp.date >= startDateStr && exp.date <= endDateStr) {
+    calendarExpenses.forEach((exp) => {
+      if (exp.date >= startDateStr && exp.date <= endDateStr) {
         weekTotal += Number(exp.amount || 0);
       }
     });
@@ -3176,13 +3182,26 @@ function CalendarGraphs({ totals, expenses, viewMonth }) {
           <div className="category-bar-chart">
             {catData.map((cat) => {
               const pct = catTotal > 0 ? (cat.total / catTotal) * 100 : 0;
+              const Icon = cat.icon;
               return (
                 <div key={cat.name} className="category-bar-row">
-                  <span className="category-bar-name">{cat.name}</span>
+                  <div className="category-bar-header">
+                    <div className="category-bar-title">
+                      {Icon && (
+                        <span className="category-bar-icon" style={{ background: cat.color }}>
+                          <Icon size={13} />
+                        </span>
+                      )}
+                      <span className="category-bar-name">{cat.name}</span>
+                    </div>
+                    <div className="category-bar-values">
+                      <strong className="category-bar-amount">{currency(cat.total)}</strong>
+                      <span className="category-bar-pct">{Math.round(pct)}%</span>
+                    </div>
+                  </div>
                   <div className="category-bar-track">
                     <div className="category-bar-fill" style={{ width: `${pct}%`, background: cat.color }} />
                   </div>
-                  <span className="category-bar-pct">{Math.round(pct)}%</span>
                 </div>
               );
             })}
@@ -3200,6 +3219,12 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
   });
   const [selectedDate, setSelectedDate] = useState(null);
   const [closing, setClosing] = useState(false);
+
+  const activeExpenses = useMemo(() => {
+    return (expenses || []).filter(
+      (item) => item.type === "expense" && item.budgetSource !== "leftover" && !item.leftoverMonthKey
+    );
+  }, [expenses]);
 
   const [year, month] = useMemo(() => {
     const parts = (viewMonth || "").split("-");
@@ -3225,13 +3250,13 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
   ];
 
   const allByDate = useMemo(() => {
-    return (expenses || []).reduce((map, item) => {
-      if (item.type === "expense" && item.date) {
+    return activeExpenses.reduce((map, item) => {
+      if (item.date) {
         map[item.date] = (map[item.date] || 0) + Number(item.amount || 0);
       }
       return map;
     }, {});
-  }, [expenses]);
+  }, [activeExpenses]);
 
   const viewCycle = useMemo(() => {
     const toDateKey = (date) =>
@@ -3248,10 +3273,10 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
   }, [year, month]);
 
   const viewMonthTotal = useMemo(() => {
-    return (expenses || [])
-      .filter((exp) => exp.type === "expense" && exp.date && exp.date >= viewCycle.startKey && exp.date < viewCycle.endExclusiveKey)
+    return activeExpenses
+      .filter((exp) => exp.date && exp.date >= viewCycle.startKey && exp.date < viewCycle.endExclusiveKey)
       .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  }, [expenses, viewCycle]);
+  }, [activeExpenses, viewCycle]);
 
   const prevMonth = () => {
     const d = new Date(year, month - 1, 1);
@@ -3271,7 +3296,7 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
     }, 280);
   };
 
-  const selectedExpenses = selectedDate ? expenses.filter((item) => item.date === selectedDate) : [];
+  const selectedExpenses = selectedDate ? activeExpenses.filter((item) => item.date === selectedDate) : [];
   const selectedTotal = selectedDate ? (allByDate[selectedDate] || 0) : 0;
   const selectedLabel = selectedDate
     ? new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
@@ -3334,7 +3359,7 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
         </div>
       </section>
 
-      <CalendarGraphs totals={totals} expenses={expenses} viewMonth={viewMonth} />
+      <CalendarGraphs totals={totals} expenses={activeExpenses} viewMonth={viewMonth} />
 
       {selectedDate && createPortal(
         <div className={`modal-backdrop ${closing ? "calendar-closing" : ""}`} onMouseDown={closePopup}>
