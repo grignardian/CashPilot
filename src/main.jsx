@@ -2925,7 +2925,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
 
       {editingLeftoverSpend && createPortal(
         <div className="modal-backdrop" style={{ zIndex: 1100 }} onMouseDown={() => setEditingLeftoverSpend(null)}>
-          <div className="modal-card leftover-detail-modal" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 420px)", padding: "24px" }}>
+          <div className="modal-card leftover-detail-modal" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(94vw, 540px)", padding: "24px" }}>
             <button className="close-button" aria-label="Close" onClick={() => setEditingLeftoverSpend(null)}>
               <X size={16} />
             </button>

@@ -1070,9 +1070,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 
 .leftover-detail-modal {
-  width: min(100%, 640px);
+  width: min(94vw, 780px);
   max-height: min(88vh, 760px);
-  padding: 26px 24px;
+  padding: 28px 30px;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
