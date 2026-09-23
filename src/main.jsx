@@ -2766,31 +2766,33 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
                 : "Previous monthly cycle"}
             </p>
 
-            <div className="leftover-total-card">
-              <span>{isRolledOver ? "Already added to this month" : "Available leftover"}</span>
-              <strong>{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</strong>
-              {isRolledOver && <small>{currency(rolloverTx?.amount || prevCycle?.leftover || 0)} was rolled over.</small>}
-              {!isRolledOver && previousCycleDetails.leftoverSpent > 0 && (
-                <small>{currency(previousCycleDetails.leftoverSpent)} already assigned to leftover spends.</small>
-              )}
-            </div>
+            <div className="leftover-overview-grid">
+              <div className="leftover-total-card">
+                <span>{isRolledOver ? "Already added to this month" : "Available leftover"}</span>
+                <strong>{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</strong>
+                {isRolledOver && <small>{currency(rolloverTx?.amount || prevCycle?.leftover || 0)} was rolled over.</small>}
+                {!isRolledOver && previousCycleDetails.leftoverSpent > 0 && (
+                  <small>{currency(previousCycleDetails.leftoverSpent)} already assigned to leftover spends.</small>
+                )}
+              </div>
 
-            <div className="leftover-metrics-grid">
-              <div>
-                <span>Budget</span>
-                <strong>{currency(prevCycle?.allowance || 0)}</strong>
-              </div>
-              <div>
-                <span>Spent</span>
-                <strong>{currency(prevCycle?.totalSpent || 0)}</strong>
-              </div>
-              <div>
-                <span>Savings target</span>
-                <strong>{currency(prevCycle?.savingsGoal || 0)}</strong>
-              </div>
-              <div>
-                <span>Used from leftover</span>
-                <strong>{currency(previousCycleDetails.leftoverSpent)}</strong>
+              <div className="leftover-metrics-grid">
+                <div>
+                  <span>Budget</span>
+                  <strong>{currency(prevCycle?.allowance || 0)}</strong>
+                </div>
+                <div>
+                  <span>Spent</span>
+                  <strong>{currency(prevCycle?.totalSpent || 0)}</strong>
+                </div>
+                <div>
+                  <span>Savings target</span>
+                  <strong>{currency(prevCycle?.savingsGoal || 0)}</strong>
+                </div>
+                <div>
+                  <span>Used from leftover</span>
+                  <strong>{currency(previousCycleDetails.leftoverSpent)}</strong>
+                </div>
               </div>
             </div>
 
@@ -2834,84 +2836,86 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
               </button>
             </div>
 
-            <div className="leftover-section">
-              <div className="leftover-section-title">
-                <h3>Category split</h3>
-                <span>{previousCycleDetails.categoryBreakdown.length} categories</span>
+            <div className="leftover-sections-grid">
+              <div className="leftover-section">
+                <div className="leftover-section-title">
+                  <h3>Category split</h3>
+                  <span>{previousCycleDetails.categoryBreakdown.length} categories</span>
+                </div>
+                {previousCycleDetails.categoryBreakdown.length > 0 ? (
+                  previousCycleDetails.categoryBreakdown.map((item) => {
+                    const Icon = item.icon;
+                    const percent = prevCycle?.totalSpent > 0 ? Math.min(100, Math.round((item.total / prevCycle.totalSpent) * 100)) : 0;
+                    return (
+                      <div className="leftover-category-row" key={item.name}>
+                        <span className="category-icon" style={{ background: item.color }}>
+                          <Icon size={16} />
+                        </span>
+                        <div>
+                          <strong>{item.name}</strong>
+                          <small>{item.count} {item.count === 1 ? "entry" : "entries"} · {percent}%</small>
+                          <div className="progress">
+                            <span style={{ width: `${percent}%`, background: item.color }} />
+                          </div>
+                        </div>
+                        <b>{currency(item.total)}</b>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="leftover-empty">No expenses were logged in this cycle.</p>
+                )}
               </div>
-              {previousCycleDetails.categoryBreakdown.length > 0 ? (
-                previousCycleDetails.categoryBreakdown.map((item) => {
-                  const Icon = item.icon;
-                  const percent = prevCycle?.totalSpent > 0 ? Math.min(100, Math.round((item.total / prevCycle.totalSpent) * 100)) : 0;
+
+              <div className="leftover-section">
+                <div className="leftover-section-title">
+                  <h3>Leftover spends</h3>
+                  <span>{previousCycleDetails.leftoverSpends.length} entries</span>
+                </div>
+                {previousCycleDetails.leftoverSpends.map((tx) => {
+                  const categoryMeta = categories.find((c) => c.name === tx.category) || categories[categories.length - 1];
+                  const Icon = categoryMeta.icon;
+                  const spendTitle = tx.title || String(tx.note || "").split(" · ")[0] || tx.category || "Leftover spend";
+                  const spendNote = tx.title ? (tx.note || "") : String(tx.note || "").split(" · ").slice(1).join(" · ");
                   return (
-                    <div className="leftover-category-row" key={item.name}>
-                      <span className="category-icon" style={{ background: item.color }}>
+                    <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
+                      <span className="category-icon" style={{ background: categoryMeta.color }}>
                         <Icon size={16} />
                       </span>
-                      <div>
-                        <strong>{item.name}</strong>
-                        <small>{item.count} {item.count === 1 ? "entry" : "entries"} · {percent}%</small>
-                        <div className="progress">
-                          <span style={{ width: `${percent}%`, background: item.color }} />
-                        </div>
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{spendTitle}</strong>
+                        <small style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                          {formatDate(tx.dateStr)} · {tx.category || "Other"}{spendNote ? ` · ${spendNote}` : ""}
+                        </small>
                       </div>
-                      <b>{currency(item.total)}</b>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                        <b>{currency(tx.amount)}</b>
+                        <button
+                          type="button"
+                          className="edit-expense pressable"
+                          style={{ margin: 0 }}
+                          aria-label={`Edit ${spendTitle}`}
+                          onClick={() => handleStartEditLeftoverSpend(tx)}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="delete-expense pressable"
+                          style={{ margin: 0 }}
+                          aria-label={`Delete ${spendTitle}`}
+                          onClick={() => setDeleteLeftoverTarget(tx)}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
                     </div>
                   );
-                })
-              ) : (
-                <p className="leftover-empty">No expenses were logged in this cycle.</p>
-              )}
-            </div>
-
-            <div className="leftover-section">
-              <div className="leftover-section-title">
-                <h3>Leftover spends</h3>
-                <span>{previousCycleDetails.leftoverSpends.length} entries</span>
+                })}
+                {previousCycleDetails.leftoverSpends.length === 0 && (
+                  <p className="leftover-empty">No spends assigned to leftover yet.</p>
+                )}
               </div>
-              {previousCycleDetails.leftoverSpends.map((tx) => {
-                const categoryMeta = categories.find((c) => c.name === tx.category) || categories[categories.length - 1];
-                const Icon = categoryMeta.icon;
-                const spendTitle = tx.title || String(tx.note || "").split(" · ")[0] || tx.category || "Leftover spend";
-                const spendNote = tx.title ? (tx.note || "") : String(tx.note || "").split(" · ").slice(1).join(" · ");
-                return (
-                  <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
-                    <span className="category-icon" style={{ background: categoryMeta.color }}>
-                      <Icon size={16} />
-                    </span>
-                    <div style={{ minWidth: 0 }}>
-                      <strong style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{spendTitle}</strong>
-                      <small style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                        {formatDate(tx.dateStr)} · {tx.category || "Other"}{spendNote ? ` · ${spendNote}` : ""}
-                      </small>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                      <b>{currency(tx.amount)}</b>
-                      <button
-                        type="button"
-                        className="edit-expense pressable"
-                        style={{ margin: 0 }}
-                        aria-label={`Edit ${spendTitle}`}
-                        onClick={() => handleStartEditLeftoverSpend(tx)}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="delete-expense pressable"
-                        style={{ margin: 0 }}
-                        aria-label={`Delete ${spendTitle}`}
-                        onClick={() => setDeleteLeftoverTarget(tx)}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {previousCycleDetails.leftoverSpends.length === 0 && (
-                <p className="leftover-empty">No spends assigned to leftover yet.</p>
-              )}
             </div>
 
           </div>
