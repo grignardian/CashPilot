@@ -460,6 +460,7 @@ function CashPilotApp() {
               updateSettings={updateSettings}
               totals={totals}
               addTransaction={addTransaction}
+              updateTransaction={updateTransaction}
               deleteTransaction={deleteTransaction}
               transactions={transactions}
               accounts={accounts}
@@ -2129,7 +2130,7 @@ function ExpenseRow({ expense, onDelete, onEdit, splits = [], settleSplit, unset
   );
 }
 
-function BudgetScreen({ settings, updateSettings, totals, addTransaction, deleteTransaction, transactions = [], accounts, useBudget, prevCycle }) {
+function BudgetScreen({ settings, updateSettings, totals, addTransaction, updateTransaction, deleteTransaction, transactions = [], accounts, useBudget, prevCycle }) {
   const [addMoneyOpen, setAddMoneyOpen] = useState(false);
   const [addAmount, setAddAmount] = useState("");
   const [addNote, setAddNote] = useState("");
@@ -2147,6 +2148,11 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
   });
   const [leftoverSpendMsg, setLeftoverSpendMsg] = useState("");
   const [addingLeftoverSpend, setAddingLeftoverSpend] = useState(false);
+  const [editingLeftoverSpend, setEditingLeftoverSpend] = useState(null);
+  const [savingEditLeftoverSpend, setSavingEditLeftoverSpend] = useState(false);
+  const [editLeftoverSpendMsg, setEditLeftoverSpendMsg] = useState("");
+  const [deleteLeftoverTarget, setDeleteLeftoverTarget] = useState(null);
+  const [deletingLeftoverSpend, setDeletingLeftoverSpend] = useState(false);
 
   const previousCycleDetails = useMemo(() => {
     if (!prevCycle?.startDateKey || !prevCycle?.endDateKey) {
@@ -2371,6 +2377,71 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
       setLeftoverSpendMsg("Could not add leftover spend. Try again.");
     } finally {
       setAddingLeftoverSpend(false);
+    }
+  };
+
+  const handleStartEditLeftoverSpend = (tx) => {
+    const rawNote = String(tx.note || "");
+    const parts = rawNote.split(" · ");
+    const inferredTitle = tx.title || (parts[0] !== "Leftover spend" && parts[0] !== tx.category ? parts[0] : "");
+    const inferredNote = tx.title ? (tx.note || "") : (parts[0] === inferredTitle ? parts.slice(1).join(" · ") : (parts.length > 1 ? parts.slice(1).join(" · ") : (parts[0] === "Leftover spend" ? "" : rawNote)));
+
+    setEditingLeftoverSpend({
+      id: tx.id,
+      originalAmount: Number(tx.amount || 0),
+      title: inferredTitle,
+      amount: String(tx.amount || ""),
+      category: tx.category || "Other",
+      note: inferredNote
+    });
+    setEditLeftoverSpendMsg("");
+  };
+
+  const handleSaveEditLeftoverSpend = async () => {
+    if (!editingLeftoverSpend || savingEditLeftoverSpend) return;
+    const amount = Number(editingLeftoverSpend.amount);
+    if (!amount || amount <= 0) {
+      setEditLeftoverSpendMsg("Please enter a valid amount.");
+      return;
+    }
+
+    const maxAvailable = previousCycleDetails.remainingLeftover + editingLeftoverSpend.originalAmount;
+    if (amount > maxAvailable) {
+      setEditLeftoverSpendMsg(`Only ${currency(maxAvailable)} is available in leftover.`);
+      return;
+    }
+
+    setSavingEditLeftoverSpend(true);
+    setEditLeftoverSpendMsg("");
+    try {
+      if (updateTransaction) {
+        await updateTransaction(editingLeftoverSpend.id, {
+          amount,
+          category: editingLeftoverSpend.category || "Other",
+          note: [editingLeftoverSpend.title || "Leftover spend", editingLeftoverSpend.note].filter(Boolean).join(" · ")
+        });
+      }
+      setEditingLeftoverSpend(null);
+    } catch (error) {
+      console.error(error);
+      setEditLeftoverSpendMsg("Could not update leftover spend. Try again.");
+    } finally {
+      setSavingEditLeftoverSpend(false);
+    }
+  };
+
+  const handleConfirmDeleteLeftoverSpend = async () => {
+    if (!deleteLeftoverTarget?.id || deletingLeftoverSpend) return;
+    setDeletingLeftoverSpend(true);
+    try {
+      if (deleteTransaction) {
+        await deleteTransaction(deleteLeftoverTarget.id);
+      }
+      setDeleteLeftoverTarget(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setDeletingLeftoverSpend(false);
     }
   };
 
@@ -2798,20 +2869,144 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, delete
                 <h3>Leftover spends</h3>
                 <span>{previousCycleDetails.leftoverSpends.length} entries</span>
               </div>
-              {previousCycleDetails.leftoverSpends.map((tx) => (
-                <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
-                  <div>
-                    <strong>{tx.title || String(tx.note || "").split(" · ")[0] || tx.category || "Leftover spend"}</strong>
-                    <small>{formatDate(tx.dateStr)} · {tx.category || "Other"}</small>
+              {previousCycleDetails.leftoverSpends.map((tx) => {
+                const categoryMeta = categories.find((c) => c.name === tx.category) || categories[categories.length - 1];
+                const Icon = categoryMeta.icon;
+                const spendTitle = tx.title || String(tx.note || "").split(" · ")[0] || tx.category || "Leftover spend";
+                const spendNote = tx.title ? (tx.note || "") : String(tx.note || "").split(" · ").slice(1).join(" · ");
+                return (
+                  <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
+                    <span className="category-icon" style={{ background: categoryMeta.color }}>
+                      <Icon size={16} />
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{spendTitle}</strong>
+                      <small style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                        {formatDate(tx.dateStr)} · {tx.category || "Other"}{spendNote ? ` · ${spendNote}` : ""}
+                      </small>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                      <b>{currency(tx.amount)}</b>
+                      <button
+                        type="button"
+                        className="edit-expense pressable"
+                        style={{ margin: 0 }}
+                        aria-label={`Edit ${spendTitle}`}
+                        onClick={() => handleStartEditLeftoverSpend(tx)}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="delete-expense pressable"
+                        style={{ margin: 0 }}
+                        aria-label={`Delete ${spendTitle}`}
+                        onClick={() => setDeleteLeftoverTarget(tx)}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <b>{currency(tx.amount)}</b>
-                </div>
-              ))}
+                );
+              })}
               {previousCycleDetails.leftoverSpends.length === 0 && (
                 <p className="leftover-empty">No spends assigned to leftover yet.</p>
               )}
             </div>
 
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {editingLeftoverSpend && createPortal(
+        <div className="modal-backdrop" style={{ zIndex: 1100 }} onMouseDown={() => setEditingLeftoverSpend(null)}>
+          <div className="modal-card leftover-detail-modal" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 420px)", padding: "24px" }}>
+            <button className="close-button" aria-label="Close" onClick={() => setEditingLeftoverSpend(null)}>
+              <X size={16} />
+            </button>
+            <div className="modal-icon" style={{ background: "rgba(169, 141, 245, 0.15)", color: "var(--accent-light)" }}>
+              <Pencil size={20} />
+            </div>
+            <h2>Edit leftover spend</h2>
+            <p>Update spend details or amount for this leftover entry.</p>
+
+            <div className="leftover-spend-form" style={{ marginTop: "16px" }}>
+              <input
+                value={editingLeftoverSpend.title}
+                onChange={(e) => setEditingLeftoverSpend((f) => ({ ...f, title: e.target.value }))}
+                placeholder="Spend name"
+              />
+              <AmountInput
+                value={editingLeftoverSpend.amount}
+                onChange={(val) => setEditingLeftoverSpend((f) => ({ ...f, amount: val }))}
+              />
+              <CustomDropdown
+                value={editingLeftoverSpend.category}
+                options={categories}
+                onChange={(val) => setEditingLeftoverSpend((f) => ({ ...f, category: val }))}
+                portalClassName="modal-dropdown-layer"
+              />
+              <input
+                value={editingLeftoverSpend.note}
+                onChange={(e) => setEditingLeftoverSpend((f) => ({ ...f, note: e.target.value }))}
+                placeholder="Note"
+              />
+            </div>
+            {editLeftoverSpendMsg && <p className="leftover-form-message">{editLeftoverSpendMsg}</p>}
+            
+            <div style={{ display: "flex", gap: "10px", marginTop: "18px" }}>
+              <button
+                type="button"
+                className="primary-button pressable"
+                style={{ flex: 1, background: "var(--surface-raised)", border: "1px solid var(--border)", margin: 0, justifyContent: "center" }}
+                onClick={() => setEditingLeftoverSpend(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button pressable"
+                style={{ flex: 1, margin: 0, justifyContent: "center" }}
+                disabled={savingEditLeftoverSpend || !editingLeftoverSpend.amount}
+                onClick={handleSaveEditLeftoverSpend}
+              >
+                {savingEditLeftoverSpend ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {deleteLeftoverTarget && createPortal(
+        <div className="modal-backdrop" style={{ zIndex: 1100 }} onMouseDown={() => setDeleteLeftoverTarget(null)}>
+          <div className="modal-card delete-confirm-card" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-icon" style={{ background: "rgba(245, 200, 216, 0.15)", color: "var(--pink)" }}>
+              <X size={20} />
+            </div>
+            <h2>Delete leftover spend?</h2>
+            <p>
+              <strong style={{ color: "var(--text)" }}>
+                {deleteLeftoverTarget.title || String(deleteLeftoverTarget.note || "").split(" · ")[0] || deleteLeftoverTarget.category || "Leftover spend"}
+              </strong> · {currency(deleteLeftoverTarget.amount)}
+              <br />This will restore {currency(deleteLeftoverTarget.amount)} back to your leftover balance.
+            </p>
+            <button
+              className="primary-button pressable"
+              style={{ background: "#c0392b", marginTop: "20px" }}
+              disabled={deletingLeftoverSpend}
+              onClick={handleConfirmDeleteLeftoverSpend}
+            >
+              {deletingLeftoverSpend ? "Deleting..." : "Delete spend"}
+            </button>
+            <button
+              className="primary-button pressable"
+              style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", marginTop: "10px" }}
+              onClick={() => setDeleteLeftoverTarget(null)}
+            >
+              Cancel
+            </button>
           </div>
         </div>,
         document.body

@@ -1209,12 +1209,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   border-top: 1px solid var(--border);
 }
 
-.leftover-category-row {
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-}
-
+.leftover-category-row,
 .leftover-entry-row {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
 }
 
 .leftover-category-row strong,
