@@ -136,8 +136,12 @@ export function sumExpensesForMonth(transactions, monthKey) {
   const startKey = formatDate(startDate);
   const endKey = formatDate(endDate);
 
-  return transactions
-    .filter((tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && tx.dateKey >= startKey && tx.dateKey <= endKey)
+  return (transactions || [])
+    .filter((tx) => {
+      const dKey = extractTxDateKey(tx);
+      const isExpense = String(tx?.type || "expense").toLowerCase() === "expense";
+      return isExpense && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey && dKey >= startKey && dKey <= endKey;
+    })
     .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 }
 
@@ -148,8 +152,12 @@ export function sumExpensesForMonth(transactions, monthKey) {
  * @returns {number} Total spent on that date
  */
 export function sumExpensesForDate(transactions, dateKey) {
-  return transactions
-    .filter((tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && tx.dateKey === dateKey)
+  return (transactions || [])
+    .filter((tx) => {
+      const dKey = extractTxDateKey(tx);
+      const isExpense = String(tx?.type || "expense").toLowerCase() === "expense";
+      return isExpense && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey && dKey === dateKey;
+    })
     .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 }
 
@@ -237,7 +245,7 @@ export function saveCycleBudget(monthKey, budget, savingsGoal = 0) {
 
 /**
  * Get last month's leftover balance and summary.
- * Accurately computes unspent money from the previous period (from the 1st of previous month up to the 6th of current month).
+ * Accurately computes unspent money from the previous period (from the 7th of previous month up to the 6th of current month).
  * @param {Array} transactions - All user transactions
  * @param {object} settings - User profile settings ({ allowance, savingsGoal })
  * @returns {object} Last month leftover summary
@@ -276,7 +284,9 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     ...tx,
     dateStr: extractTxDateKey(tx),
     amount: Number(tx?.amount || 0),
-    type: String(tx?.type || "expense").toLowerCase()
+    type: String(tx?.type || "expense").toLowerCase(),
+    budgetSource: tx?.budgetSource || "",
+    leftoverMonthKey: tx?.leftoverMonthKey || ""
   }));
 
   // Cycle span: from 7th of previous month to 6th of current month
@@ -284,7 +294,7 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
   const prevPeriodEndKey = prevCtx.endDateKey;
 
   const cycleExpenses = normTxs.filter(
-    (tx) => tx.type === "expense" && tx.dateStr >= prevPeriodStartKey && tx.dateStr <= prevPeriodEndKey
+    (tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey && tx.dateStr >= prevPeriodStartKey && tx.dateStr <= prevPeriodEndKey
   );
 
   const cycleIncomes = normTxs.filter(

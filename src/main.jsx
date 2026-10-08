@@ -269,7 +269,7 @@ function CashPilotApp() {
 
     // Only count expense-type transactions from the current month/cycle
     const monthExpenses = expenses.filter(
-      (item) => item.type === "expense" && item.budgetSource !== "leftover" && item.date >= startDateKey && item.date <= endDateKey
+      (item) => item.type === "expense" && item.budgetSource !== "leftover" && !item.leftoverMonthKey && item.date >= startDateKey && item.date <= endDateKey
     );
 
     const spent = monthExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -1180,7 +1180,7 @@ function GoalPreview({ goals }) {
   );
 }
 
-function AmountInput({ value, onChange }) {
+function AmountInput({ value, onChange, placeholder = "Amount" }) {
   const [open, setOpen] = useState(false);
   const [display, setDisplay] = useState(String(value || ""));
 
@@ -1207,8 +1207,11 @@ function AmountInput({ value, onChange }) {
   return (
     <>
       <button type="button" className="custom-dropdown-trigger" onClick={openCalc}>
-        <span className="custom-dropdown-value">
-          {value ? `₹ ${Number(value).toLocaleString("en-IN")}` : ""}
+        <span
+          className="custom-dropdown-value"
+          style={{ color: value ? "var(--text)" : "var(--text-secondary)" }}
+        >
+          {value ? `₹ ${Number(value).toLocaleString("en-IN")}` : placeholder}
         </span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/><line x1="8" y1="18" x2="8" y2="18.01"/><line x1="12" y1="18" x2="16" y2="18"/></svg>
       </button>
@@ -2167,30 +2170,26 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
       };
     }
 
-    const cycleTxs = (transactions || [])
-      .map((tx) => ({
-        ...tx,
-        dateStr: extractTxDateKey(tx),
-        amount: Number(tx?.amount || 0),
-        type: String(tx?.type || "expense").toLowerCase()
-      }))
-      .filter((tx) => tx.dateStr >= prevCycle.startDateKey && tx.dateStr <= prevCycle.endDateKey);
+    const normTxs = (transactions || []).map((tx) => ({
+      ...tx,
+      dateStr: extractTxDateKey(tx),
+      amount: Number(tx?.amount || 0),
+      type: String(tx?.type || "expense").toLowerCase(),
+      budgetSource: tx?.budgetSource || "",
+      leftoverMonthKey: tx?.leftoverMonthKey || ""
+    }));
+
+    const cycleTxs = normTxs.filter((tx) => tx.dateStr >= prevCycle.startDateKey && tx.dateStr <= prevCycle.endDateKey);
 
     const expenses = cycleTxs
-      .filter((tx) => tx.type === "expense")
+      .filter((tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey)
       .sort((a, b) => String(b.dateStr).localeCompare(String(a.dateStr)));
 
     const incomes = cycleTxs
       .filter((tx) => tx.type === "income" && !String(tx.note || "").toLowerCase().includes("rollover"))
       .sort((a, b) => String(b.dateStr).localeCompare(String(a.dateStr)));
 
-    const leftoverSpends = (transactions || [])
-      .map((tx) => ({
-        ...tx,
-        dateStr: extractTxDateKey(tx),
-        amount: Number(tx?.amount || 0),
-        type: String(tx?.type || "expense").toLowerCase()
-      }))
+    const leftoverSpends = normTxs
       .filter((tx) => tx.type === "expense" && tx.budgetSource === "leftover" && tx.leftoverMonthKey === prevCycle.monthKey)
       .sort((a, b) => String(b.dateStr).localeCompare(String(a.dateStr)));
 
@@ -2811,6 +2810,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
                 <AmountInput
                   value={leftoverSpendForm.amount}
                   onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, amount: val }))}
+                  placeholder="Amount"
                 />
                 <CustomDropdown
                   value={leftoverSpendForm.category}
@@ -2821,7 +2821,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
                 <input
                   value={leftoverSpendForm.note}
                   onChange={(event) => setLeftoverSpendForm((form) => ({ ...form, note: event.target.value }))}
-                  placeholder="Note"
+                  placeholder="Note (optional)"
                   disabled={isRolledOver}
                 />
               </div>
@@ -2944,6 +2944,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
               <AmountInput
                 value={editingLeftoverSpend.amount}
                 onChange={(val) => setEditingLeftoverSpend((f) => ({ ...f, amount: val }))}
+                placeholder="Amount"
               />
               <CustomDropdown
                 value={editingLeftoverSpend.category}
@@ -2954,7 +2955,7 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
               <input
                 value={editingLeftoverSpend.note}
                 onChange={(e) => setEditingLeftoverSpend((f) => ({ ...f, note: e.target.value }))}
-                placeholder="Note"
+                placeholder="Note (optional)"
               />
             </div>
             {editLeftoverSpendMsg && <p className="leftover-form-message">{editLeftoverSpendMsg}</p>}
