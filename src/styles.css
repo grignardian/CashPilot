@@ -446,7 +446,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .close-button:active { transform: scale(0.8); background: rgba(0,0,0,0.16); }
 
-.ai-label, .milestone-title {
+.ai-label {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -457,7 +457,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   color: #2d4a22;
 }
 
-.ai-label svg, .milestone-title svg { color: var(--accent); }
+.ai-label svg { color: var(--accent); }
 
 .ai-content {
   display: flex;
@@ -1526,16 +1526,37 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   border: 1px solid rgba(212, 200, 245, 0.3);
   border-radius: var(--radius);
   background: var(--accent-light);
-  color: #17131f;
+  color: #111111;
 }
 
-.milestone-title h2 { margin: 0; font-size: 14px; font-weight: 700; }
+.milestone-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #111111;
+}
+
+.milestone-title h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111111;
+}
+
+.milestone-title svg {
+  color: #111111;
+}
 
 .milestone-card p {
   margin: 10px 0 14px;
   font-size: 13px;
   line-height: 1.4;
-  opacity: 0.8;
+  color: #111111;
+  opacity: 0.85;
 }
 
 /* === Calendar === */
