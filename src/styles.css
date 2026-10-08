@@ -2898,19 +2898,22 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 
 .detail-card.tint .custom-dropdown-trigger {
-  background: rgba(0, 0, 0, 0.08);
-  border-color: rgba(0, 0, 0, 0.12);
-  color: #000000;
+  background: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #111111 !important;
+}
+
+.detail-card.tint .custom-dropdown-value {
+  color: #111111 !important;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .detail-card.tint .custom-dropdown-trigger svg {
-  color: #000000;
-  opacity: 0.7;
-}
-
-.detail-card .custom-dropdown-value {
-  font-family: var(--font-serif);
-  font-size: 20px;
+  color: #111111 !important;
+  stroke: #111111 !important;
+  opacity: 0.85;
 }
 
 /* === Dropdown Icon Visibility Fix === */

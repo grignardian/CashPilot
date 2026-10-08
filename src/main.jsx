@@ -1213,7 +1213,7 @@ function AmountInput({ value, onChange, placeholder = "Amount" }) {
       <button type="button" className="custom-dropdown-trigger" onClick={openCalc}>
         <span
           className="custom-dropdown-value"
-          style={{ color: value ? "var(--text)" : "var(--text-secondary)" }}
+          style={!value ? { opacity: 0.6 } : undefined}
         >
           {value ? `₹ ${Number(value).toLocaleString("en-IN")}` : placeholder}
         </span>
