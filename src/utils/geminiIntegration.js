@@ -22,7 +22,7 @@ function normalizeCategory(catStr) {
 
   const lower = clean.toLowerCase();
   if (lower.includes("food") || lower.includes("eat") || lower.includes("din") || lower.includes("meal") || lower.includes("snack") || lower.includes("canteen")) return "Food";
-  if (lower.includes("trans") || lower.includes("travel") || lower.includes("commute") || lower.includes("cab") || lower.includes("ride")) return "Transport";
+  if (lower.includes("trans") || lower.includes("travel") || lower.includes("commute") || lower.includes("cab") || lower.includes("ride") || lower.includes("bike") || lower.includes("cycle") || lower.includes("scoot") || lower.includes("taxi") || lower.includes("auto") || lower.includes("bus") || lower.includes("metro") || lower.includes("train") || lower.includes("petrol") || lower.includes("fuel")) return "Transport";
   if (lower.includes("groc") || lower.includes("supermarket") || lower.includes("market") || lower.includes("store")) return "Groceries";
   if (lower.includes("shop") || lower.includes("cloth") || lower.includes("wear") || lower.includes("buy")) return "Shopping";
   if (lower.includes("bill") || lower.includes("rent") || lower.includes("electric") || lower.includes("utility") || lower.includes("power")) return "Bills & Rent";
@@ -121,7 +121,7 @@ Return ONLY valid JSON (no markdown, no code blocks): {"suggestedName": "string"
 
 Category definitions:
 - Food: Canteen, Swiggy, Zomato, meals, snacks, tea, chai, coffee, drinks, restaurants.
-- Transport: Auto, Uber, Ola, Rapido, bus, metro, train, cab, petrol, fuel, parking, ticket.
+- Transport: Bike, bicycle, cycle, scooter, scooty, auto, Uber, Ola, Rapido, bus, metro, train, cab, taxi, flight, petrol, fuel, diesel, parking, toll, fastag, ticket, commute, ride.
 - Groceries: Blinkit, Zepto, Instamart, supermarket, milk, veggies, fruits, eggs, bread, daily essentials.
 - Shopping: Amazon, Flipkart, Myntra, Meesho, clothes, shoes, electronics, accessories, gadget.
 - Bills & Rent: Room/flat rent, electricity, Wi-Fi/broadband, water, gas cylinder, maintenance bill.
@@ -228,7 +228,14 @@ export function fallbackCategorySuggestion(input) {
   const healthWords = ["doctor", "pharmacy", "medicine", "meds", "hospital", "clinic", "syrup", "tablets", "pills", "lab test", "gym fee", "protein", "whey", "dentist", "medical", "bandage", "crocin", "paracetamol"];
   const giftWords = ["gift", "birthday gift", "treat for friends", "present", "flowers", "rakhi", "anniversary gift", "farewell gift"];
   const hangoutWords = ["movie", "film", "cinema", "imax", "pvr", "inox", "gaming", "ps5", "bowling", "arcade", "outing", "trip", "party", "club", "concert", "event", "standup", "pub", "bar"];
-  const transportWords = ["auto", "uber", "ola", "rapido", "bus", "metro", "train", "cab", "petrol", "diesel", "fuel", "rickshaw", "bus ticket", "metro pass", "train ticket", "parking", "toll", "fastag", "scooty", "bike refill"];
+  const transportWords = [
+    "auto", "uber", "ola", "rapido", "bus", "metro", "train", "cab", "taxi",
+    "bike", "bicycle", "cycle", "scooter", "scooty", "activa", "motorcycle", "pulsar", "bullet", "splendor", "two wheeler", "2 wheeler", "yulu", "bounce", "vogo",
+    "petrol", "diesel", "fuel", "cng", "ev charge", "ev charging",
+    "rickshaw", "e-rickshaw", "toto", "tuktuk",
+    "bus ticket", "metro pass", "train ticket", "flight ticket", "flight", "airfare", "aeroplane", "railway", "irctc", "redbus", "chalo",
+    "parking", "toll", "fastag", "puncture", "service center", "mechanic"
+  ];
   const shoppingWords = ["amazon", "flipkart", "myntra", "meesho", "ajio", "zara", "h&m", "clothes", "shirt", "tshirt", "t-shirt", "jeans", "pants", "shoes", "sneakers", "jacket", "hoodie", "electronics", "headphones", "earbuds", "earphones", "charger", "cable", "case", "cover"];
   const foodWords = ["swiggy", "zomato", "maggi", "dosa", "chai", "tea", "coffee", "lunch", "dinner", "breakfast", "snack", "biryani", "pizza", "burger", "thali", "mess", "canteen", "juice", "water", "milkshake", "egg", "bread", "rice", "noodles", "momos", "samosa", "pani puri", "food", "cafe", "restaurant", "dhaba", "shawarma", "kathi roll", "pastry", "cake", "ice cream", "subway", "dominos", "kfc", "mcdonalds"];
 
