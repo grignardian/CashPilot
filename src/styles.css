@@ -1012,19 +1012,11 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   overflow: hidden;
 }
 
-.detail-card.tint {
-  background: var(--accent-light);
-  border-color: transparent;
-  color: #000000;
-}
-
-.detail-card.tint p {
-  color: #000000;
-}
-
-.detail-card.tint .money-input input {
-  background: rgba(0,0,0,0.08);
-  color: #000000;
+.detail-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .detail-card strong {
@@ -2990,11 +2982,6 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   border-color: rgba(124, 92, 191, 0.2);
 }
 
-[data-theme="light"] .detail-card.tint {
-  background: var(--accent-light);
-  color: #000000;
-}
-
 [data-theme="light"] .eye-toggle {
   background: rgba(0, 0, 0, 0.05);
   color: var(--text-secondary);
@@ -3035,29 +3022,30 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* === Detail Card AmountInput Override === */
 .detail-card .custom-dropdown-trigger {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  height: 40px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  height: 44px;
   border-radius: 10px;
-  margin-top: 12px;
+  margin-top: 10px;
+  padding: 0 12px;
+  color: var(--text);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
-.detail-card.tint .custom-dropdown-trigger {
-  background: rgba(0, 0, 0, 0.08) !important;
-  border-color: rgba(0, 0, 0, 0.12) !important;
-  color: #111111 !important;
+.detail-card .custom-dropdown-trigger:hover,
+.detail-card .custom-dropdown-trigger:focus {
+  border-color: rgba(169, 141, 245, 0.4);
 }
 
-.detail-card.tint .custom-dropdown-value {
-  color: #111111 !important;
+.detail-card .custom-dropdown-value {
   font-family: var(--font-serif);
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--text);
 }
 
-.detail-card.tint .custom-dropdown-trigger svg {
-  color: #111111 !important;
-  stroke: #111111 !important;
+.detail-card .custom-dropdown-trigger svg {
+  color: var(--accent-light);
   opacity: 0.85;
 }
 

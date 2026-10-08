@@ -2942,11 +2942,11 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
       {useBudget ? (
         <>
           <div className="detail-grid" style={{ marginTop: "16px" }}>
-            <section className="detail-card tint">
+            <section className="detail-card">
               <p>Monthly allowance</p>
               <AmountInput value={String(settings.allowance || "")} onChange={(val) => update("allowance", val)} />
             </section>
-            <section className="detail-card tint">
+            <section className="detail-card">
               <p>Savings goal</p>
               <AmountInput value={String(settings.savingsGoal || "")} onChange={(val) => update("savingsGoal", val)} />
             </section>
