@@ -6,6 +6,7 @@ import {
   Bell,
   Bus,
   CalendarDays,
+  ChevronDown,
   ChevronRight,
   Coffee,
   Eye,
@@ -1329,17 +1330,24 @@ function DateInput({ value, onChange }) {
   );
 }
 
-function CustomDropdown({ value, options, onChange, portalClassName = "" }) {
+function CustomDropdown({ value, options, onChange, portalClassName = "", placeholder = "Select..." }) {
   const [open, setOpen] = useState(false);
 
-  // Support both string[] and object[] (with .name, .icon, .color)
-  const isStringOptions = options.length === 0 || typeof options[0] === "string";
-  const normalize = (opt) =>
-    isStringOptions ? { name: opt, color: null, icon: null } : opt;
+  const normalizedOptions = useMemo(() => {
+    return options.map((opt) => {
+      if (typeof opt === "string" || typeof opt === "number") {
+        return { value: opt, label: String(opt), color: null, icon: null };
+      }
+      return {
+        value: opt.value !== undefined ? opt.value : opt.name,
+        label: opt.label !== undefined ? opt.label : opt.name,
+        color: opt.color || null,
+        icon: opt.icon || null
+      };
+    });
+  }, [options]);
 
-  const selected = isStringOptions
-    ? (options.includes(value) ? normalize(value) : null)
-    : options.find((opt) => opt.name === value);
+  const selected = normalizedOptions.find((opt) => opt.value === value || opt.label === value);
 
   return (
     <div className="custom-dropdown">
@@ -1348,39 +1356,40 @@ function CustomDropdown({ value, options, onChange, portalClassName = "" }) {
         className="custom-dropdown-trigger"
         onClick={() => setOpen(!open)}
       >
-        {selected && (
+        {selected ? (
           <>
             {selected.color && selected.icon && (
               <span className="custom-dropdown-icon" style={{ background: selected.color }}>
                 <selected.icon size={14} />
               </span>
             )}
-            <span className="custom-dropdown-value">{selected.name}</span>
+            <span className="custom-dropdown-value">{selected.label}</span>
           </>
+        ) : (
+          <span className="custom-dropdown-value" style={{ color: "var(--text-secondary)" }}>{placeholder}</span>
         )}
-        {!selected && <span className="custom-dropdown-value"></span>}
-        <Tags className="custom-dropdown-chevron" size={16} />
+        <ChevronDown className={`custom-dropdown-chevron ${open ? "open" : ""}`} size={16} />
       </button>
       {open && createPortal(
         <div className={`custom-dropdown-backdrop ${portalClassName}`} onMouseDown={() => setOpen(false)}>
           <div className="custom-dropdown-menu" onMouseDown={(e) => e.stopPropagation()}>
-            {options.map((opt) => {
-              const norm = normalize(opt);
-              const OptIcon = norm.icon;
+            {normalizedOptions.map((opt) => {
+              const OptIcon = opt.icon;
+              const isSelected = opt.value === value || opt.label === value;
               return (
                 <button
                   type="button"
-                  key={norm.name}
-                  className={`custom-dropdown-item ${norm.name === value ? "active" : ""}`}
-                  onClick={() => { onChange(norm.name); setOpen(false); }}
+                  key={String(opt.value)}
+                  className={`custom-dropdown-item ${isSelected ? "active" : ""}`}
+                  onClick={() => { onChange(opt.value); setOpen(false); }}
                 >
-                  {OptIcon && norm.color && (
-                    <span className="custom-dropdown-icon" style={{ background: norm.color }}>
+                  {OptIcon && opt.color && (
+                    <span className="custom-dropdown-icon" style={{ background: opt.color }}>
                       <OptIcon size={14} />
                     </span>
                   )}
-                  <span>{norm.name}</span>
-                  {norm.name === value && (
+                  <span>{opt.label}</span>
+                  {isSelected && (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                   )}
                 </button>
@@ -3119,6 +3128,17 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
     return "th";
   };
 
+  const cycleDayOptions = useMemo(() => {
+    return Array.from({ length: 31 }, (_, i) => {
+      const day = i + 1;
+      const suffix = getOrdinalSuffix(day);
+      return {
+        value: day,
+        label: day === 7 ? `${day}${suffix} (Default)` : `${day}${suffix}`
+      };
+    });
+  }, []);
+
   return (
     <div className="page settings-page">
       <section className="hero-copy utility-hero">
@@ -3178,31 +3198,11 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
             </label>
             <label>
               <span>Budget cycle start day</span>
-              <select
+              <CustomDropdown
                 value={form.cycleStartDay}
-                onChange={(event) => setForm({ ...form, cycleStartDay: Number(event.target.value) })}
-                style={{
-                  width: "100%",
-                  height: "44px",
-                  padding: "0 14px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)",
-                  background: "var(--bg)",
-                  color: "var(--text)",
-                  fontSize: "14px",
-                  outline: "none",
-                  cursor: "pointer"
-                }}
-              >
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                  <option key={day} value={day} style={{ background: "var(--surface)", color: "var(--text)" }}>
-                    {day}{getOrdinalSuffix(day)} of every month {day === 7 ? "(Default)" : day === 1 ? "(1st of month)" : ""}
-                  </option>
-                ))}
-              </select>
-              <small style={{ color: "var(--text-secondary)", fontSize: "11px", marginTop: "4px", display: "block" }}>
-                Cycle will run from the {form.cycleStartDay}{getOrdinalSuffix(form.cycleStartDay)} of each month to the {form.cycleStartDay === 1 ? "last day of the month" : `${form.cycleStartDay - 1}${getOrdinalSuffix(form.cycleStartDay - 1)} of next month`}.
-              </small>
+                options={cycleDayOptions}
+                onChange={(val) => setForm({ ...form, cycleStartDay: Number(val) })}
+              />
             </label>
           </>
         )}
