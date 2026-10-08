@@ -1044,42 +1044,187 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   line-height: 1.3;
 }
 
-.leftover-summary-card {
+/* === Leftover Horizontal Bar (In Budget Screen) === */
+.leftover-horizontal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
   cursor: pointer;
-  transition: border-color 200ms ease, transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 200ms ease, background 200ms ease;
 }
 
-.leftover-summary-card:focus-visible {
-  outline: 2px solid var(--accent-light);
-  outline-offset: 3px;
+.leftover-horizontal-bar:hover {
+  border-color: rgba(169, 141, 245, 0.4);
+  background: var(--surface-raised);
 }
 
-.leftover-summary-card:active {
+.leftover-horizontal-bar:active {
+  transform: scale(0.99);
   border-color: var(--accent-light);
-  transform: scale(0.98);
 }
 
-.leftover-view-link {
+.leftover-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.leftover-bar-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(200, 240, 192, 0.15);
+  color: var(--green);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.leftover-bar-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.leftover-bar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.leftover-bar-title-row strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.leftover-bar-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(200, 240, 192, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(200, 240, 192, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.leftover-bar-content small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leftover-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.leftover-bar-amount {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.leftover-bar-chevron {
+  color: var(--text-secondary);
+  transition: transform 200ms ease;
+}
+
+.leftover-horizontal-bar:hover .leftover-bar-chevron {
+  transform: translateX(3px);
+  color: var(--text);
+}
+
+/* === Leftover Page View (Dedicated Subpage) === */
+.leftover-page-view {
+  animation: fadeIn 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  padding-bottom: 40px;
+}
+
+.leftover-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.leftover-back-button {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  margin-top: 8px;
-  color: var(--accent-light);
-  font-size: 11px;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px 6px 0;
+  border-radius: 8px;
+  transition: color 150ms ease;
+}
+
+.leftover-back-button:hover {
+  color: var(--text);
+}
+
+.leftover-hero-card {
+  padding: 24px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.leftover-hero-main span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
   font-weight: 700;
 }
 
-.leftover-detail-modal {
-  width: min(96vw, 920px);
-  max-height: min(88vh, 800px);
-  padding: 32px 34px;
-  overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+.leftover-hero-main h2 {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 400;
+  margin: 6px 0 8px;
+  color: var(--text);
 }
 
-.leftover-detail-modal::-webkit-scrollbar {
-  display: none;
+.leftover-hero-main p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.leftover-hero-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .leftover-overview-grid {

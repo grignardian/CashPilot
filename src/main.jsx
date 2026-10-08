@@ -7,6 +7,7 @@ import {
   Bus,
   CalendarDays,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Coffee,
   Eye,
@@ -2457,6 +2458,441 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
     }
   };
 
+  if (leftoverDetailsOpen) {
+    return (
+      <div className="page leftover-page-view">
+        <div className="leftover-page-header">
+          <button
+            type="button"
+            className="leftover-back-button pressable"
+            onClick={() => setLeftoverDetailsOpen(false)}
+          >
+            <ChevronLeft size={18} />
+            <span>Back to budget</span>
+          </button>
+          <div className="leftover-header-actions">
+            <button
+              type="button"
+              className="outline-pill pressable"
+              style={{ padding: "6px 12px", fontSize: "12px", gap: "6px", margin: 0 }}
+              onClick={() => {
+                setPrevBudgetInput(String(prevCycle?.allowance || 4000));
+                setEditPrevBudgetOpen(true);
+              }}
+            >
+              <Pencil size={13} />
+              <span>Adjust budget</span>
+            </button>
+          </div>
+        </div>
+
+        <section className="hero-copy utility-hero" style={{ marginTop: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+            <div className="leftover-bar-icon" style={{ width: "36px", height: "36px", borderRadius: "10px" }}>
+              <Wallet size={18} />
+            </div>
+            <h1 style={{ fontSize: "24px", margin: 0 }}>{prevCycle?.monthName || "Last month"} leftover</h1>
+          </div>
+          <p>
+            {prevCycle?.startDateKey && prevCycle?.endDateKey
+              ? `${formatDate(prevCycle.startDateKey)} to ${formatDate(prevCycle.endDateKey)}`
+              : "Previous monthly cycle"}
+          </p>
+        </section>
+
+        {/* Hero Card with Leftover Balance & Rollover Action */}
+        <div className="leftover-hero-card">
+          <div className="leftover-hero-main">
+            <span>{isRolledOver ? "Already added to this month" : "Available leftover wallet"}</span>
+            <h2>{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</h2>
+            {isRolledOver ? (
+              <p>{currency(rolloverTx?.amount || prevCycle?.leftover || 0)} was rolled over into this month's budget.</p>
+            ) : (
+              <p>
+                {previousCycleDetails.leftoverSpent > 0
+                  ? `${currency(previousCycleDetails.leftoverSpent)} spent on separate expenses · ${currency(previousCycleDetails.remainingLeftover)} remaining.`
+                  : "You can roll this over to your current month's budget or spend it separately without affecting this month's limits."}
+              </p>
+            )}
+          </div>
+
+          {(prevCycle?.leftover > 0 || isRolledOver) && (
+            <div className="leftover-hero-action">
+              {isRolledOver ? (
+                <button
+                  type="button"
+                  className="pressable"
+                  onClick={handleUndoRollover}
+                  disabled={rollingOver}
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    padding: "8px 16px",
+                    borderRadius: "999px",
+                    border: "1px solid var(--border)",
+                    background: "rgba(255, 255, 255, 0.08)",
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <CheckCircle2 size={15} color="var(--green)" /> Added · <span style={{ textDecoration: "underline" }}>Undo rollover</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="primary-button pressable"
+                  onClick={handleAddRollover}
+                  disabled={rollingOver}
+                  style={{
+                    margin: 0,
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    padding: "8px 18px",
+                    borderRadius: "999px",
+                    background: "var(--green)",
+                    color: "#111",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <Plus size={15} /> Add to this month's budget
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Stats grid */}
+        <div className="leftover-metrics-grid" style={{ marginTop: "16px" }}>
+          <div>
+            <span>Budget</span>
+            <strong>{currency(prevCycle?.allowance || 0)}</strong>
+          </div>
+          <div>
+            <span>Spent</span>
+            <strong>{currency(prevCycle?.totalSpent || 0)}</strong>
+          </div>
+          <div>
+            <span>Savings target</span>
+            <strong>{currency(prevCycle?.savingsGoal || 0)}</strong>
+          </div>
+          <div>
+            <span>Used from leftover</span>
+            <strong>{currency(previousCycleDetails.leftoverSpent)}</strong>
+          </div>
+        </div>
+
+        {/* Spend from Leftover Card */}
+        <div className="leftover-spend-box" style={{ marginTop: "20px" }}>
+          <div className="leftover-section-title">
+            <h3>Spend from leftover</h3>
+            <span>{isRolledOver ? "Rolled over" : `${currency(previousCycleDetails.remainingLeftover)} left`}</span>
+          </div>
+          <div className="leftover-spend-form">
+            <input
+              value={leftoverSpendForm.title}
+              onChange={(event) => setLeftoverSpendForm((form) => ({ ...form, title: event.target.value }))}
+              placeholder="Spend name"
+              disabled={isRolledOver}
+            />
+            <AmountInput
+              value={leftoverSpendForm.amount}
+              onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, amount: val }))}
+              placeholder="Amount"
+            />
+            <CustomDropdown
+              value={leftoverSpendForm.category}
+              options={categories}
+              onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, category: val }))}
+            />
+            <input
+              value={leftoverSpendForm.note}
+              onChange={(event) => setLeftoverSpendForm((form) => ({ ...form, note: event.target.value }))}
+              placeholder="Note (optional)"
+              disabled={isRolledOver}
+            />
+          </div>
+          {leftoverSpendMsg && <p className="leftover-form-message">{leftoverSpendMsg}</p>}
+          <button
+            type="button"
+            className="primary-button pressable"
+            disabled={isRolledOver || addingLeftoverSpend || !leftoverSpendForm.amount || previousCycleDetails.remainingLeftover <= 0}
+            onClick={handleAddLeftoverSpend}
+            style={{ marginTop: "12px" }}
+          >
+            {addingLeftoverSpend ? "Adding..." : "Use leftover for this spend"}
+          </button>
+        </div>
+
+        {/* Two column grid for categories & logged leftover spends */}
+        <div className="leftover-sections-grid" style={{ marginTop: "20px" }}>
+          <div className="leftover-section">
+            <div className="leftover-section-title">
+              <h3>Leftover spends</h3>
+              <span>{previousCycleDetails.leftoverSpends.length} entries</span>
+            </div>
+            {previousCycleDetails.leftoverSpends.map((tx) => {
+              const categoryMeta = categories.find((c) => c.name === tx.category) || categories[categories.length - 1];
+              const Icon = categoryMeta.icon;
+              const spendTitle = tx.title || String(tx.note || "").split(" · ")[0] || tx.category || "Leftover spend";
+              const spendNote = tx.title ? (tx.note || "") : String(tx.note || "").split(" · ").slice(1).join(" · ");
+              return (
+                <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
+                  <span className="category-icon" style={{ background: categoryMeta.color }}>
+                    <Icon size={16} />
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <strong style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", display: "block" }}>{spendTitle}</strong>
+                    <small style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", display: "block" }}>
+                      {formatDate(tx.dateStr)} · {tx.category || "Other"}{spendNote ? ` · ${spendNote}` : ""}
+                    </small>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                    <b>{currency(tx.amount)}</b>
+                    <button
+                      type="button"
+                      className="edit-expense pressable"
+                      style={{ margin: 0 }}
+                      aria-label={`Edit ${spendTitle}`}
+                      onClick={() => handleStartEditLeftoverSpend(tx)}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="delete-expense pressable"
+                      style={{ margin: 0 }}
+                      aria-label={`Delete ${spendTitle}`}
+                      onClick={() => setDeleteLeftoverTarget(tx)}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {previousCycleDetails.leftoverSpends.length === 0 && (
+              <p className="leftover-empty">No spends assigned to leftover yet.</p>
+            )}
+          </div>
+
+          <div className="leftover-section">
+            <div className="leftover-section-title">
+              <h3>Category split</h3>
+              <span>{previousCycleDetails.categoryBreakdown.length} categories</span>
+            </div>
+            {previousCycleDetails.categoryBreakdown.length > 0 ? (
+              previousCycleDetails.categoryBreakdown.map((item) => {
+                const Icon = item.icon;
+                const percent = prevCycle?.totalSpent > 0 ? Math.min(100, Math.round((item.total / prevCycle.totalSpent) * 100)) : 0;
+                return (
+                  <div className="leftover-category-row" key={item.name}>
+                    <span className="category-icon" style={{ background: item.color }}>
+                      <Icon size={16} />
+                    </span>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <small>{item.count} {item.count === 1 ? "entry" : "entries"} · {percent}%</small>
+                      <div className="progress">
+                        <span style={{ width: `${percent}%`, background: item.color }} />
+                      </div>
+                    </div>
+                    <b>{currency(item.total)}</b>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="leftover-empty">No expenses were logged in this cycle.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Edit Previous Budget Modal */}
+        {editPrevBudgetOpen && createPortal(
+          <div className="modal-backdrop" onMouseDown={() => setEditPrevBudgetOpen(false)}>
+            <div className="modal-card" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 360px)", padding: "24px" }}>
+              <div className="modal-icon" style={{ background: "rgba(169, 141, 245, 0.15)", color: "var(--accent-light)", margin: "0 auto 12px" }}>
+                <Pencil size={20} />
+              </div>
+              <h2 style={{ fontSize: "18px", margin: "0 0 8px", textAlign: "center" }}>
+                {prevCycle?.monthName ? `${prevCycle.monthName} Budget` : "Previous Cycle Budget"}
+              </h2>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", textAlign: "center", margin: "0 0 16px" }}>
+                Set the baseline budget for {prevCycle?.monthName || "the previous cycle"} to calculate accurate leftover.
+              </p>
+              <label style={{ display: "block", marginBottom: "16px" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Previous Month Budget</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={prevBudgetInput}
+                  onChange={(e) => setPrevBudgetInput(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="4000"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    background: "var(--surface-raised)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text)",
+                    fontSize: "16px",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </label>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "20px", background: "rgba(255,255,255,0.03)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                  <span>Budget:</span>
+                  <strong style={{ color: "var(--text)" }}>{currency(Number(prevBudgetInput) || 0)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                  <span>Total Spent:</span>
+                  <strong style={{ color: "var(--text)" }}>{currency(prevCycle?.totalSpent || 0)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: "4px", marginTop: "4px" }}>
+                  <span>Resulting Leftover:</span>
+                  <strong style={{ color: "var(--green)" }}>{currency(Math.max(0, (Number(prevBudgetInput) || 0) - (prevCycle?.totalSpent || 0)))}</strong>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="primary-button pressable"
+                  style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text)", margin: 0, flex: 1 }}
+                  onClick={() => setEditPrevBudgetOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button pressable"
+                  style={{ background: "var(--accent-light)", color: "#17131f", fontWeight: "600", margin: 0, flex: 1 }}
+                  onClick={() => {
+                    const val = Number(prevBudgetInput) || 0;
+                    if (prevCycle?.monthKey) {
+                      saveCycleBudget(prevCycle.monthKey, val, prevCycle?.savingsGoal || 0);
+                      updateSettings({
+                        ...settings,
+                        cycleBudgets: {
+                          ...(settings?.cycleBudgets || {}),
+                          [prevCycle.monthKey]: { budget: val, savingsGoal: prevCycle?.savingsGoal || 0 }
+                        }
+                      });
+                    }
+                    setEditPrevBudgetOpen(false);
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        {/* Editing spend modal */}
+        {editingLeftoverSpend && createPortal(
+          <div className="modal-backdrop" style={{ zIndex: 1100 }} onMouseDown={() => setEditingLeftoverSpend(null)}>
+            <div className="modal-card leftover-detail-modal" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(94vw, 540px)", padding: "24px" }}>
+              <button className="close-button" aria-label="Close" onClick={() => setEditingLeftoverSpend(null)}>
+                <X size={16} />
+              </button>
+              <div className="modal-icon" style={{ background: "rgba(169, 141, 245, 0.15)", color: "var(--accent-light)" }}>
+                <Pencil size={20} />
+              </div>
+              <h2>Edit leftover spend</h2>
+              <p>Update spend details or amount for this leftover entry.</p>
+
+              <div className="leftover-spend-form" style={{ marginTop: "16px" }}>
+                <input
+                  value={editingLeftoverSpend.title}
+                  onChange={(e) => setEditingLeftoverSpend((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="Spend name"
+                />
+                <AmountInput
+                  value={editingLeftoverSpend.amount}
+                  onChange={(val) => setEditingLeftoverSpend((f) => ({ ...f, amount: val }))}
+                  placeholder="Amount"
+                />
+                <CustomDropdown
+                  value={editingLeftoverSpend.category}
+                  options={categories}
+                  onChange={(val) => setEditingLeftoverSpend((f) => ({ ...f, category: val }))}
+                  portalClassName="modal-dropdown-layer"
+                />
+                <input
+                  value={editingLeftoverSpend.note}
+                  onChange={(e) => setEditingLeftoverSpend((f) => ({ ...f, note: e.target.value }))}
+                  placeholder="Note (optional)"
+                />
+              </div>
+              {editLeftoverSpendMsg && <p className="leftover-form-message">{editLeftoverSpendMsg}</p>}
+              
+              <div style={{ display: "flex", gap: "10px", marginTop: "18px" }}>
+                <button
+                  type="button"
+                  className="primary-button pressable"
+                  style={{ flex: 1, background: "var(--surface-raised)", border: "1px solid var(--border)", margin: 0, justifyContent: "center" }}
+                  onClick={() => setEditingLeftoverSpend(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button pressable"
+                  style={{ flex: 1, margin: 0, justifyContent: "center" }}
+                  disabled={savingEditLeftoverSpend || !editingLeftoverSpend.amount}
+                  onClick={handleSaveEditLeftoverSpend}
+                >
+                  {savingEditLeftoverSpend ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        {/* Delete modal */}
+        {deleteLeftoverTarget && createPortal(
+          <div className="modal-backdrop" style={{ zIndex: 1100 }} onMouseDown={() => setDeleteLeftoverTarget(null)}>
+            <div className="modal-card delete-confirm-card" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="modal-icon" style={{ background: "rgba(245, 200, 216, 0.15)", color: "var(--pink)" }}>
+                <X size={20} />
+              </div>
+              <h2>Delete leftover spend?</h2>
+              <p>
+                <strong style={{ color: "var(--text)" }}>
+                  {deleteLeftoverTarget.title || String(deleteLeftoverTarget.note || "").split(" · ")[0] || deleteLeftoverTarget.category || "Leftover spend"}
+                </strong> · {currency(deleteLeftoverTarget.amount)}
+                <br />This will restore {currency(deleteLeftoverTarget.amount)} back to your leftover balance.
+              </p>
+              <button
+                className="primary-button pressable"
+                style={{ background: "#c0392b", marginTop: "20px" }}
+                disabled={deletingLeftoverSpend}
+                onClick={handleConfirmDeleteLeftoverSpend}
+              >
+                {deletingLeftoverSpend ? "Deleting..." : "Delete spend"}
+              </button>
+              <button
+                className="primary-button pressable"
+                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", marginTop: "10px" }}
+                onClick={() => setDeleteLeftoverTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="page budget-page">
       <section className="hero-copy utility-hero">
@@ -2524,111 +2960,43 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
               <strong>{currency(totals.dailyLimit)}</strong>
               <small>Based on the money left this month.</small>
             </section>
-            <section
-              className="detail-card leftover-summary-card pressable"
-              role="button"
-              tabIndex={0}
-              onClick={() => setLeftoverDetailsOpen(true)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  setLeftoverDetailsOpen(true);
-                }
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <p style={{ margin: 0 }}>Last month leftover</p>
-                <button
-                  type="button"
-                  title="Adjust previous month budget"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setPrevBudgetInput(String(prevCycle?.allowance || 4000));
-                    setEditPrevBudgetOpen(true);
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "var(--text-secondary)",
-                    cursor: "pointer",
-                    padding: "2px 4px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    fontSize: "11px"
-                  }}
-                >
-                  <Pencil size={12} />
-                </button>
-              </div>
-              <strong>{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</strong>
-              <small>
-                {isRolledOver
-                  ? `${currency(rolloverTx?.amount || prevCycle?.leftover || 0)} added to this month`
-                  : (prevCycle?.monthName ? `${prevCycle.monthName} unspent · ${currency(previousCycleDetails.leftoverSpent)} used` : "From previous cycle")}
-              </small>
-              <span className="leftover-view-link">
-                View segregated details <ChevronRight size={12} />
-              </span>
-
-              {(prevCycle?.leftover > 0 || isRolledOver) && (
-                <div style={{ marginTop: "10px" }}>
-                  {isRolledOver ? (
-                    <button
-                      type="button"
-                      className="pressable"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleUndoRollover();
-                      }}
-                      disabled={rollingOver}
-                      style={{
-                        fontSize: "11px",
-                        fontWeight: "600",
-                        padding: "4px 10px",
-                        borderRadius: "999px",
-                        border: "1px solid var(--border)",
-                        background: "rgba(255, 255, 255, 0.05)",
-                        color: "var(--text-secondary)",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "5px"
-                      }}
-                      title="Undo rollover to this month"
-                    >
-                      <CheckCircle2 size={12} color="var(--green)" /> Added · <span style={{ textDecoration: "underline", color: "var(--text)" }}>Undo</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="pressable"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleAddRollover();
-                      }}
-                      disabled={rollingOver}
-                      style={{
-                        fontSize: "11px",
-                        fontWeight: "600",
-                        padding: "5px 12px",
-                        borderRadius: "999px",
-                        border: "1px solid var(--green)",
-                        background: "rgba(200, 240, 192, 0.12)",
-                        color: "var(--green)",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "5px"
-                      }}
-                    >
-                      <Plus size={12} /> Add to this month
-                    </button>
-                  )}
-                </div>
-              )}
-            </section>
           </div>
+
+          <section
+            className="leftover-horizontal-bar pressable"
+            role="button"
+            tabIndex={0}
+            onClick={() => setLeftoverDetailsOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setLeftoverDetailsOpen(true);
+              }
+            }}
+          >
+            <div className="leftover-bar-left">
+              <div className="leftover-bar-icon">
+                <Wallet size={20} />
+              </div>
+              <div className="leftover-bar-content">
+                <div className="leftover-bar-title-row">
+                  <strong>{prevCycle?.monthName || "Last month"} leftover</strong>
+                  {isRolledOver && <span className="leftover-bar-badge">Added to budget</span>}
+                </div>
+                <small>
+                  {isRolledOver
+                    ? `${currency(rolloverTx?.amount || prevCycle?.leftover || 0)} rolled over · Tap to manage`
+                    : (previousCycleDetails.leftoverSpent > 0
+                        ? `${currency(previousCycleDetails.leftoverSpent)} spent · ${currency(previousCycleDetails.remainingLeftover)} available`
+                        : `${currency(prevCycle?.leftover || 0)} unspent · Tap to view & manage`)}
+                </small>
+              </div>
+            </div>
+            <div className="leftover-bar-right">
+              <span className="leftover-bar-amount">{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</span>
+              <ChevronRight size={18} className="leftover-bar-chevron" />
+            </div>
+          </section>
 
           <section className="milestone-card pressable">
             <div className="milestone-title">
@@ -2675,262 +3043,6 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
             <button className="primary-button pressable" disabled={adding || !addAmount} onClick={handleAddMoney} style={{ marginTop: "16px" }}>
               {adding ? "Adding..." : "Add to budget"}
             </button>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {editPrevBudgetOpen && createPortal(
-        <div className="modal-backdrop" onMouseDown={() => setEditPrevBudgetOpen(false)}>
-          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()} style={{ width: "min(100%, 360px)", padding: "24px" }}>
-            <div className="modal-icon" style={{ background: "rgba(169, 141, 245, 0.15)", color: "var(--accent-light)", margin: "0 auto 12px" }}>
-              <Pencil size={20} />
-            </div>
-            <h2 style={{ fontSize: "18px", margin: "0 0 8px", textAlign: "center" }}>
-              {prevCycle?.monthName ? `${prevCycle.monthName} Budget` : "Previous Cycle Budget"}
-            </h2>
-            <p style={{ fontSize: "13px", color: "var(--text-secondary)", textAlign: "center", margin: "0 0 16px" }}>
-              Set the baseline budget for {prevCycle?.monthName || "the previous cycle"} to calculate accurate leftover.
-            </p>
-            <label style={{ display: "block", marginBottom: "16px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Previous Month Budget</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={prevBudgetInput}
-                onChange={(e) => setPrevBudgetInput(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="4000"
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  background: "var(--surface-raised)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text)",
-                  fontSize: "16px",
-                  boxSizing: "border-box"
-                }}
-              />
-            </label>
-            <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "20px", background: "rgba(255,255,255,0.03)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                <span>Budget:</span>
-                <strong style={{ color: "var(--text)" }}>{currency(Number(prevBudgetInput) || 0)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                <span>Total Spent:</span>
-                <strong style={{ color: "var(--text)" }}>{currency(prevCycle?.totalSpent || 0)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: "4px", marginTop: "4px" }}>
-                <span>Resulting Leftover:</span>
-                <strong style={{ color: "var(--green)" }}>{currency(Math.max(0, (Number(prevBudgetInput) || 0) - (prevCycle?.totalSpent || 0)))}</strong>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                type="button"
-                className="primary-button pressable"
-                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text)", margin: 0, flex: 1 }}
-                onClick={() => setEditPrevBudgetOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="primary-button pressable"
-                style={{ background: "var(--accent-light)", color: "#17131f", fontWeight: "600", margin: 0, flex: 1 }}
-                onClick={() => {
-                  const val = Number(prevBudgetInput) || 0;
-                  if (prevCycle?.monthKey) {
-                    saveCycleBudget(prevCycle.monthKey, val, prevCycle?.savingsGoal || 0);
-                    updateSettings({
-                      ...settings,
-                      cycleBudgets: {
-                        ...(settings?.cycleBudgets || {}),
-                        [prevCycle.monthKey]: { budget: val, savingsGoal: prevCycle?.savingsGoal || 0 }
-                      }
-                    });
-                  }
-                  setEditPrevBudgetOpen(false);
-                }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {leftoverDetailsOpen && createPortal(
-        <div className="modal-backdrop" onMouseDown={() => setLeftoverDetailsOpen(false)}>
-          <div className="modal-card leftover-detail-modal" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="close-button" aria-label="Close" onClick={() => setLeftoverDetailsOpen(false)}>
-              <X size={16} />
-            </button>
-            <div className="modal-icon" style={{ background: "rgba(200, 240, 192, 0.15)", color: "var(--green)" }}>
-              <Wallet size={20} />
-            </div>
-            <h2>{prevCycle?.monthName || "Last month"} leftover</h2>
-            <p>
-              {prevCycle?.startDateKey && prevCycle?.endDateKey
-                ? `${formatDate(prevCycle.startDateKey)} to ${formatDate(prevCycle.endDateKey)}`
-                : "Previous monthly cycle"}
-            </p>
-
-            <div className="leftover-overview-grid">
-              <div className="leftover-total-card">
-                <span>{isRolledOver ? "Already added to this month" : "Available leftover"}</span>
-                <strong>{currency(isRolledOver ? 0 : previousCycleDetails.remainingLeftover)}</strong>
-                {isRolledOver && <small>{currency(rolloverTx?.amount || prevCycle?.leftover || 0)} was rolled over.</small>}
-                {!isRolledOver && previousCycleDetails.leftoverSpent > 0 && (
-                  <small>{currency(previousCycleDetails.leftoverSpent)} already assigned to leftover spends.</small>
-                )}
-              </div>
-
-              <div className="leftover-metrics-grid">
-                <div>
-                  <span>Budget</span>
-                  <strong>{currency(prevCycle?.allowance || 0)}</strong>
-                </div>
-                <div>
-                  <span>Spent</span>
-                  <strong>{currency(prevCycle?.totalSpent || 0)}</strong>
-                </div>
-                <div>
-                  <span>Savings target</span>
-                  <strong>{currency(prevCycle?.savingsGoal || 0)}</strong>
-                </div>
-                <div>
-                  <span>Used from leftover</span>
-                  <strong>{currency(previousCycleDetails.leftoverSpent)}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="leftover-spend-box">
-              <div className="leftover-section-title">
-                <h3>Spend from leftover</h3>
-                <span>{isRolledOver ? "Rolled over" : `${currency(previousCycleDetails.remainingLeftover)} left`}</span>
-              </div>
-              <div className="leftover-spend-form">
-                <input
-                  value={leftoverSpendForm.title}
-                  onChange={(event) => setLeftoverSpendForm((form) => ({ ...form, title: event.target.value }))}
-                  placeholder="Spend name"
-                  disabled={isRolledOver}
-                />
-                <AmountInput
-                  value={leftoverSpendForm.amount}
-                  onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, amount: val }))}
-                  placeholder="Amount"
-                />
-                <CustomDropdown
-                  value={leftoverSpendForm.category}
-                  options={categories}
-                  onChange={(val) => setLeftoverSpendForm((form) => ({ ...form, category: val }))}
-                  portalClassName="modal-dropdown-layer"
-                />
-                <input
-                  value={leftoverSpendForm.note}
-                  onChange={(event) => setLeftoverSpendForm((form) => ({ ...form, note: event.target.value }))}
-                  placeholder="Note (optional)"
-                  disabled={isRolledOver}
-                />
-              </div>
-              {leftoverSpendMsg && <p className="leftover-form-message">{leftoverSpendMsg}</p>}
-              <button
-                type="button"
-                className="primary-button pressable"
-                disabled={isRolledOver || addingLeftoverSpend || !leftoverSpendForm.amount || previousCycleDetails.remainingLeftover <= 0}
-                onClick={handleAddLeftoverSpend}
-              >
-                {addingLeftoverSpend ? "Adding..." : "Use leftover for this spend"}
-              </button>
-            </div>
-
-            <div className="leftover-sections-grid">
-              <div className="leftover-section">
-                <div className="leftover-section-title">
-                  <h3>Category split</h3>
-                  <span>{previousCycleDetails.categoryBreakdown.length} categories</span>
-                </div>
-                {previousCycleDetails.categoryBreakdown.length > 0 ? (
-                  previousCycleDetails.categoryBreakdown.map((item) => {
-                    const Icon = item.icon;
-                    const percent = prevCycle?.totalSpent > 0 ? Math.min(100, Math.round((item.total / prevCycle.totalSpent) * 100)) : 0;
-                    return (
-                      <div className="leftover-category-row" key={item.name}>
-                        <span className="category-icon" style={{ background: item.color }}>
-                          <Icon size={16} />
-                        </span>
-                        <div>
-                          <strong>{item.name}</strong>
-                          <small>{item.count} {item.count === 1 ? "entry" : "entries"} · {percent}%</small>
-                          <div className="progress">
-                            <span style={{ width: `${percent}%`, background: item.color }} />
-                          </div>
-                        </div>
-                        <b>{currency(item.total)}</b>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="leftover-empty">No expenses were logged in this cycle.</p>
-                )}
-              </div>
-
-              <div className="leftover-section">
-                <div className="leftover-section-title">
-                  <h3>Leftover spends</h3>
-                  <span>{previousCycleDetails.leftoverSpends.length} entries</span>
-                </div>
-                {previousCycleDetails.leftoverSpends.map((tx) => {
-                  const categoryMeta = categories.find((c) => c.name === tx.category) || categories[categories.length - 1];
-                  const Icon = categoryMeta.icon;
-                  const spendTitle = tx.title || String(tx.note || "").split(" · ")[0] || tx.category || "Leftover spend";
-                  const spendNote = tx.title ? (tx.note || "") : String(tx.note || "").split(" · ").slice(1).join(" · ");
-                  return (
-                    <div className="leftover-entry-row" key={tx.id || `${tx.dateStr}-${tx.amount}-${tx.note}`}>
-                      <span className="category-icon" style={{ background: categoryMeta.color }}>
-                        <Icon size={16} />
-                      </span>
-                      <div style={{ minWidth: 0 }}>
-                        <strong style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{spendTitle}</strong>
-                        <small style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                          {formatDate(tx.dateStr)} · {tx.category || "Other"}{spendNote ? ` · ${spendNote}` : ""}
-                        </small>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                        <b>{currency(tx.amount)}</b>
-                        <button
-                          type="button"
-                          className="edit-expense pressable"
-                          style={{ margin: 0 }}
-                          aria-label={`Edit ${spendTitle}`}
-                          onClick={() => handleStartEditLeftoverSpend(tx)}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="delete-expense pressable"
-                          style={{ margin: 0 }}
-                          aria-label={`Delete ${spendTitle}`}
-                          onClick={() => setDeleteLeftoverTarget(tx)}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-                {previousCycleDetails.leftoverSpends.length === 0 && (
-                  <p className="leftover-empty">No spends assigned to leftover yet.</p>
-                )}
-              </div>
-            </div>
-
           </div>
         </div>,
         document.body
