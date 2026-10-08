@@ -1019,6 +1019,51 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   font-weight: 500;
 }
 
+.detail-card.tint {
+  background: var(--accent-light);
+  border-color: transparent;
+  color: #1a1721;
+}
+
+.detail-card.tint p {
+  color: #1a1721;
+  font-size: 13px;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.detail-card.tint .custom-dropdown-trigger {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  height: 44px;
+  border-radius: 10px;
+  margin-top: 10px;
+  padding: 0 12px;
+  color: #1a1721 !important;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+
+.detail-card.tint .custom-dropdown-trigger:hover,
+.detail-card.tint .custom-dropdown-trigger:focus {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+.detail-card.tint .custom-dropdown-value {
+  font-family: var(--font-serif) !important;
+  font-size: 20px;
+  font-weight: 400 !important;
+  color: #1a1721 !important;
+  letter-spacing: 0;
+}
+
+.detail-card.tint .custom-dropdown-trigger svg {
+  color: #1a1721 !important;
+  stroke: #1a1721 !important;
+  opacity: 0.55;
+  stroke-width: 1.75;
+}
+
 .detail-card strong {
   display: block;
   margin-top: 10px;

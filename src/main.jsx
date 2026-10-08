@@ -2942,11 +2942,11 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
       {useBudget ? (
         <>
           <div className="detail-grid" style={{ marginTop: "16px" }}>
-            <section className="detail-card">
+            <section className="detail-card tint">
               <p>Monthly allowance</p>
               <AmountInput value={String(settings.allowance || "")} onChange={(val) => update("allowance", val)} />
             </section>
-            <section className="detail-card">
+            <section className="detail-card tint">
               <p>Savings goal</p>
               <AmountInput value={String(settings.savingsGoal || "")} onChange={(val) => update("savingsGoal", val)} />
             </section>
@@ -2985,10 +2985,8 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
                 </div>
                 <small>
                   {isRolledOver
-                    ? `${currency(rolloverTx?.amount || prevCycle?.leftover || 0)} rolled over · Tap to manage`
-                    : (previousCycleDetails.leftoverSpent > 0
-                        ? `${currency(previousCycleDetails.leftoverSpent)} spent · ${currency(previousCycleDetails.remainingLeftover)} available`
-                        : `${currency(prevCycle?.leftover || 0)} unspent · Tap to view & manage`)}
+                    ? "Added to budget · Tap for more info"
+                    : "Tap for more info"}
                 </small>
               </div>
             </div>
