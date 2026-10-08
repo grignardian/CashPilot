@@ -72,20 +72,52 @@ export function predictMonthlySpending(currentDay, currentSpent, totalDays, budg
 }
 
 /**
- * Get current month context (days passed, remaining, etc).
+ * Compute the start date and end date for a given cycle year, month, and start day.
+ * Handles month-end wrapping cleanly (e.g. 31st of Jan -> 28th of Feb).
+ * @param {number} year - Full year (e.g. 2026)
+ * @param {number} month - 0-indexed month
+ * @param {number} [startDay=7] - Day of month when cycle starts (1-31)
+ * @returns {{ startDate: Date, endDate: Date }}
+ */
+export function getCycleDates(year, month, startDay = 7) {
+  const day = Math.max(1, Math.min(31, parseInt(startDay, 10) || 7));
+  
+  // Start date in target month
+  const maxStartDays = new Date(year, month + 1, 0).getDate();
+  const clampedStartDay = Math.min(day, maxStartDays);
+  const startDate = new Date(year, month, clampedStartDay);
+  
+  // Next cycle starts in next month
+  const maxNextDays = new Date(year, month + 2, 0).getDate();
+  const clampedNextStartDay = Math.min(day, maxNextDays);
+  const nextStartDate = new Date(year, month + 1, clampedNextStartDay);
+  
+  // End date is 1 day before the next cycle starts
+  const endDate = new Date(nextStartDate.getTime() - 24 * 60 * 60 * 1000);
+  
+  return { startDate, endDate };
+}
+
+/**
+ * Get current month context (days passed, remaining, etc) based on user's cycle start day.
  * @param {Date} [now] - Optional date override for testing
+ * @param {number} [cycleStartDay=7] - Day of month when the cycle starts
  * @returns {object} Month context
  */
-export function getMonthContext(now = new Date()) {
+export function getMonthContext(now = new Date(), cycleStartDay = 7) {
   const d = new Date(now);
+  const day = Math.max(1, Math.min(31, parseInt(cycleStartDay, 10) || 7));
+  
+  const currentCandidate = getCycleDates(d.getFullYear(), d.getMonth(), day);
   let startDate, endDate;
   
-  if (d.getDate() >= 7) {
-    startDate = new Date(d.getFullYear(), d.getMonth(), 7);
-    endDate = new Date(d.getFullYear(), d.getMonth() + 1, 6);
+  if (d.getTime() >= currentCandidate.startDate.getTime()) {
+    startDate = currentCandidate.startDate;
+    endDate = currentCandidate.endDate;
   } else {
-    startDate = new Date(d.getFullYear(), d.getMonth() - 1, 7);
-    endDate = new Date(d.getFullYear(), d.getMonth(), 6);
+    const prevCandidate = getCycleDates(d.getFullYear(), d.getMonth() - 1, day);
+    startDate = prevCandidate.startDate;
+    endDate = prevCandidate.endDate;
   }
 
   const formatDate = (date) => {
@@ -105,8 +137,10 @@ export function getMonthContext(now = new Date()) {
   return {
     year,
     month,
+    cycleStartDay: day,
     totalDays,
-    currentDay: d.getDate(),
+    currentDay: daysPassed,
+    calendarDay: d.getDate(),
     daysPassed,
     daysRemaining,
     startDateKey,
@@ -119,15 +153,15 @@ export function getMonthContext(now = new Date()) {
  * Sum expenses for a given month from a transaction list.
  * @param {Array} transactions - Array of transaction objects
  * @param {string} monthKey - "YYYY-MM" format
+ * @param {number} [cycleStartDay=7] - Day of month when the cycle starts
  * @returns {number} Total spent
  */
-export function sumExpensesForMonth(transactions, monthKey) {
+export function sumExpensesForMonth(transactions, monthKey, cycleStartDay = 7) {
   const [yearStr, monthStr] = monthKey.split("-");
   const year = parseInt(yearStr, 10);
   const month = parseInt(monthStr, 10) - 1;
   
-  const startDate = new Date(year, month, 7);
-  const endDate = new Date(year, month + 1, 6);
+  const { startDate, endDate } = getCycleDates(year, month, cycleStartDay);
   
   const formatDate = (date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -245,16 +279,17 @@ export function saveCycleBudget(monthKey, budget, savingsGoal = 0) {
 
 /**
  * Get last month's leftover balance and summary.
- * Accurately computes unspent money from the previous period (from the 7th of previous month up to the 6th of current month).
+ * Accurately computes unspent money from the previous period based on the user's cycle start day.
  * @param {Array} transactions - All user transactions
- * @param {object} settings - User profile settings ({ allowance, savingsGoal })
+ * @param {object} settings - User profile settings ({ allowance, savingsGoal, cycleStartDay })
  * @returns {object} Last month leftover summary
  */
 export function getLastMonthLeftover(transactions = [], settings = {}) {
-  const currentCtx = getMonthContext();
+  const cycleStartDay = settings?.cycleStartDay || settings?.budgetStartDay || 7;
+  const currentCtx = getMonthContext(new Date(), cycleStartDay);
   const currentStartDate = new Date(currentCtx.startDateKey);
   const prevCycleRef = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
-  const prevCtx = getMonthContext(prevCycleRef);
+  const prevCtx = getMonthContext(prevCycleRef, cycleStartDay);
 
   const cycleBudgets = getCycleBudgets();
 
@@ -289,7 +324,6 @@ export function getLastMonthLeftover(transactions = [], settings = {}) {
     leftoverMonthKey: tx?.leftoverMonthKey || ""
   }));
 
-  // Cycle span: from 7th of previous month to 6th of current month
   const prevPeriodStartKey = prevCtx.startDateKey;
   const prevPeriodEndKey = prevCtx.endDateKey;
 

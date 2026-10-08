@@ -3,27 +3,30 @@
  * Trend analysis, insights, and anomaly detection by spending category.
  */
 
-import { getMonthContext } from "./budgetCalculations";
+import { getMonthContext, extractTxDateKey } from "./budgetCalculations";
 import { VALID_CATEGORIES as CATEGORIES } from "./geminiIntegration";
 
 /**
  * Generate category breakdown for a given set of expenses.
  * @param {Array} expenses - Filtered expense transactions
  * @param {string} timeframe - 'week' | 'month' | 'all'
+ * @param {number} [cycleStartDay=7] - Cycle start day (1-31)
  * @returns {Array} Category breakdown sorted by total spent
  */
-export function generateCategoryTrends(expenses, timeframe = "month") {
+export function generateCategoryTrends(expenses, timeframe = "month", cycleStartDay = 7) {
   const now = new Date();
-  let filtered = expenses.filter((tx) => tx.type === "expense");
+  let filtered = (expenses || []).filter(
+    (tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey
+  );
 
   if (timeframe === "week") {
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
     const weekKey = weekAgo.toISOString().slice(0, 10);
-    filtered = filtered.filter((tx) => (tx.dateKey || "") >= weekKey);
+    filtered = filtered.filter((tx) => extractTxDateKey(tx) >= weekKey);
   } else if (timeframe === "month") {
-    const ctx = getMonthContext(now);
-    filtered = filtered.filter((tx) => (tx.dateKey || "") >= ctx.startDateKey && (tx.dateKey || "") <= ctx.endDateKey);
+    const ctx = getMonthContext(now, cycleStartDay);
+    filtered = filtered.filter((tx) => extractTxDateKey(tx) >= ctx.startDateKey && extractTxDateKey(tx) <= ctx.endDateKey);
   }
 
   const totalSpent = filtered.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
@@ -93,27 +96,29 @@ export function generateCategoryTimeSeries(expenses, weeks = 4) {
  * @param {string} category - Category name
  * @param {number} totalDays - Days in current month
  * @param {number} daysRemaining - Days left
+ * @param {number} [cycleStartDay=7] - Cycle start day (1-31)
  * @returns {object} Insights for the category
  */
-export function generateCategoryInsights(expenses, category, totalDays, daysRemaining) {
+export function generateCategoryInsights(expenses, category, totalDays, daysRemaining, cycleStartDay = 7) {
   const now = new Date();
-  const ctx = getMonthContext(now);
+  const ctx = getMonthContext(now, cycleStartDay);
   // Current cycle
-  const currentMonthExpenses = expenses.filter(
-    (tx) => tx.type === "expense" && tx.category === category && tx.dateKey >= ctx.startDateKey && tx.dateKey <= ctx.endDateKey
+  const currentMonthExpenses = (expenses || []).filter(
+    (tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey && tx.category === category && extractTxDateKey(tx) >= ctx.startDateKey && extractTxDateKey(tx) <= ctx.endDateKey
   );
   const currentTotal = currentMonthExpenses.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 
   // Previous cycle
   const currentStartDate = new Date(ctx.startDateKey);
   const prevCycleDate = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
-  const prevCtx = getMonthContext(prevCycleDate);
+  const prevCtx = getMonthContext(prevCycleDate, cycleStartDay);
 
-  const prevMonthExpenses = expenses.filter(
-    (tx) => tx.type === "expense" && tx.category === category && tx.dateKey >= prevCtx.startDateKey && tx.dateKey <= prevCtx.endDateKey
+  const prevMonthExpenses = (expenses || []).filter(
+    (tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey && tx.category === category && extractTxDateKey(tx) >= prevCtx.startDateKey && extractTxDateKey(tx) <= prevCtx.endDateKey
   );
   const prevTotal = prevMonthExpenses.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 
+  const daysPassed = ctx.daysPassed || 1;
   const dailyAverage = daysPassed > 0 ? currentTotal / daysPassed : 0;
   const projectedTotal = Math.round(dailyAverage * totalDays);
   const changeFromPrev = prevTotal > 0

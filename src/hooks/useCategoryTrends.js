@@ -13,9 +13,10 @@ import { getMonthContext } from "../utils/budgetCalculations";
  * @param {Array} transactions - All user transactions
  * @returns {object} { weeklyTrends, monthlyTrends, timeSeries, insights }
  */
-export function useCategoryTrends(transactions) {
+export function useCategoryTrends(transactions, settings = {}) {
   return useMemo(() => {
-    const ctx = getMonthContext();
+    const cycleStartDay = settings?.cycleStartDay || settings?.budgetStartDay || 7;
+    const ctx = getMonthContext(new Date(), cycleStartDay);
 
     const weeklyTrends = generateCategoryTrends(transactions, "week");
     const monthlyTrends = generateCategoryTrends(transactions, "month");
@@ -28,5 +29,5 @@ export function useCategoryTrends(transactions) {
       timeSeries,
       insights
     };
-  }, [transactions]);
+  }, [transactions, settings]);
 }

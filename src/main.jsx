@@ -53,7 +53,7 @@ import { getTierForAmount } from "./utils/calendarHeatmap";
 import { suggestCategoryAndName, getSpendingAdvice, isGeminiConfigured } from "./utils/geminiIntegration";
 import { exportDataAsJSON, exportAsCSV, downloadFile } from "./utils/dataExport";
 import { generateMonthlyRecap, saveMonthlyRecap } from "./utils/dataManagement";
-import { getMonthContext, getLastMonthLeftover, extractTxDateKey, saveCycleBudget, getCycleBudgets } from "./utils/budgetCalculations";
+import { getMonthContext, getCycleDates, getLastMonthLeftover, extractTxDateKey, saveCycleBudget, getCycleBudgets } from "./utils/budgetCalculations";
 import "./styles.css";
 
 const categories = [
@@ -164,8 +164,9 @@ function CashPilotApp() {
   // Onboarding completion check: Auto-mark current cycle configured and preserve cycle budgets
   useEffect(() => {
     if (useBudget && settings && settings.allowance > 0) {
+      const cycleStartDay = settings?.cycleStartDay || 7;
       const currentCycleKey = budgetMetrics.context.monthKey;
-      const prevCtx = getMonthContext(new Date(new Date(budgetMetrics.context.startDateKey).getTime() - 24 * 60 * 60 * 1000));
+      const prevCtx = getMonthContext(new Date(new Date(budgetMetrics.context.startDateKey).getTime() - 24 * 60 * 60 * 1000), cycleStartDay);
       const cycleBudgets = getCycleBudgets();
 
       // Ensure previous cycle budget is recorded
@@ -180,7 +181,7 @@ function CashPilotApp() {
         localStorage.setItem(`cashpilot-budget-configured-${currentCycleKey}`, "true");
       }
     }
-  }, [useBudget, settings?.allowance, settings?.savingsGoal, budgetMetrics.context.monthKey]);
+  }, [useBudget, settings?.allowance, settings?.savingsGoal, settings?.cycleStartDay, budgetMetrics.context.monthKey]);
 
   // Budget cycle auto-reset/rollover check starting on 7th
   useEffect(() => {
@@ -472,6 +473,7 @@ function CashPilotApp() {
             <CalendarScreen
               expenses={expenses}
               totals={totals}
+              settings={settings}
               onAdd={(date) => {
                 setPreselectedDate(date);
                 setScreen("add");
@@ -511,6 +513,7 @@ function CashPilotApp() {
           allowance={settings.allowance} 
           savingsGoal={settings.savingsGoal} 
           prevLeftover={prevCycleLeftover}
+          cycleStartDay={settings?.cycleStartDay || 7}
           onSave={handleSaveBudgetCycle}
           onClose={() => setShowResetModal(false)}
         />
@@ -2303,10 +2306,11 @@ function BudgetScreen({ settings, updateSettings, totals, addTransaction, update
   const update = (key, value) => {
     const numVal = Number(String(value).replace(/[^0-9]/g, "")) || 0;
     if (key === "allowance") {
-      const currentCtx = getMonthContext();
+      const cycleStartDay = settings?.cycleStartDay || 7;
+      const currentCtx = getMonthContext(new Date(), cycleStartDay);
       const currentStartDate = new Date(currentCtx.startDateKey);
       const prevCycleRef = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
-      const prevCtx = getMonthContext(prevCycleRef);
+      const prevCtx = getMonthContext(prevCycleRef, cycleStartDay);
       const cycleBudgets = getCycleBudgets();
 
       // Lock previous cycle budget to the previous allowance before this edit
@@ -3025,6 +3029,7 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
     name: profile.name || "",
     allowance: String(settings.allowance || 0),
     savingsGoal: String(settings.savingsGoal || 0),
+    cycleStartDay: Number(settings.cycleStartDay || 7),
     useBudget: settings.useBudget !== false
   });
   const [saving, setSaving] = useState(false);
@@ -3038,9 +3043,10 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
       name: profile.name || "",
       allowance: String(settings.allowance || 0),
       savingsGoal: String(settings.savingsGoal || 0),
+      cycleStartDay: Number(settings.cycleStartDay || 7),
       useBudget: settings.useBudget !== false
     });
-  }, [profile.name, settings.allowance, settings.savingsGoal, settings.useBudget]);
+  }, [profile.name, settings.allowance, settings.savingsGoal, settings.cycleStartDay, settings.useBudget]);
 
   const save = async (event) => {
     event.preventDefault();
@@ -3049,10 +3055,11 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
     try {
       const newAllowance = Number(form.allowance.replace(/[^0-9]/g, "")) || 0;
       const newSavingsGoal = Number(form.savingsGoal.replace(/[^0-9]/g, "")) || 0;
-      const currentCtx = getMonthContext();
+      const newCycleStartDay = Math.max(1, Math.min(31, Number(form.cycleStartDay) || 7));
+      const currentCtx = getMonthContext(new Date(), newCycleStartDay);
       const currentStartDate = new Date(currentCtx.startDateKey);
       const prevCycleRef = new Date(currentStartDate.getTime() - 24 * 60 * 60 * 1000);
-      const prevCtx = getMonthContext(prevCycleRef);
+      const prevCtx = getMonthContext(prevCycleRef, newCycleStartDay);
       const cycleBudgets = getCycleBudgets();
 
       if (!cycleBudgets[prevCtx.monthKey]?.budget || cycleBudgets[prevCtx.monthKey]?.budget === settings.allowance) {
@@ -3066,6 +3073,7 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
       await updateSettings({
         allowance: newAllowance,
         savingsGoal: newSavingsGoal,
+        cycleStartDay: newCycleStartDay,
         useBudget: form.useBudget,
         hasOnboarded: true
       });
@@ -3102,6 +3110,13 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
     const csv = exportAsCSV(transactions || []);
     downloadFile(csv, `cashpilot-expenses-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv");
     setMessage("Expenses exported as CSV.");
+  };
+
+  const getOrdinalSuffix = (num) => {
+    if (num === 1 || num === 21 || num === 31) return "st";
+    if (num === 2 || num === 22) return "nd";
+    if (num === 3 || num === 23) return "rd";
+    return "th";
   };
 
   return (
@@ -3161,12 +3176,44 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
               <span>Savings goal</span>
               <input inputMode="numeric" value={form.savingsGoal} onChange={(event) => setForm({ ...form, savingsGoal: event.target.value })} />
             </label>
+            <label>
+              <span>Budget cycle start day</span>
+              <select
+                value={form.cycleStartDay}
+                onChange={(event) => setForm({ ...form, cycleStartDay: Number(event.target.value) })}
+                style={{
+                  width: "100%",
+                  height: "44px",
+                  padding: "0 14px",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  background: "var(--bg)",
+                  color: "var(--text)",
+                  fontSize: "14px",
+                  outline: "none",
+                  cursor: "pointer"
+                }}
+              >
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                  <option key={day} value={day} style={{ background: "var(--surface)", color: "var(--text)" }}>
+                    {day}{getOrdinalSuffix(day)} of every month {day === 7 ? "(Default)" : day === 1 ? "(1st of month)" : ""}
+                  </option>
+                ))}
+              </select>
+              <small style={{ color: "var(--text-secondary)", fontSize: "11px", marginTop: "4px", display: "block" }}>
+                Cycle will run from the {form.cycleStartDay}{getOrdinalSuffix(form.cycleStartDay)} of each month to the {form.cycleStartDay === 1 ? "last day of the month" : `${form.cycleStartDay - 1}${getOrdinalSuffix(form.cycleStartDay - 1)} of next month`}.
+              </small>
+            </label>
           </>
         )}
         <section className="detail-card settings-summary">
           <p>Current mode</p>
           <strong>{form.useBudget ? currency(settings.allowance) : "Expenses Only"}</strong>
-          <small>{form.useBudget ? `${currency(settings.savingsGoal)} savings target` : "No monthly budget limit"}</small>
+          <small>
+            {form.useBudget
+              ? `${currency(settings.savingsGoal)} savings target · Starts on ${settings.cycleStartDay || 7}${getOrdinalSuffix(Number(settings.cycleStartDay) || 7)}`
+              : "No monthly budget limit"}
+          </small>
         </section>
         <section className="detail-card">
           <p>Signed in as</p>
@@ -3269,7 +3316,7 @@ function SettingsScreen({ profile, settings, updateProfile, updateSettings, onLo
   );
 }
 
-function CalendarGraphs({ totals, expenses, viewMonth }) {
+function CalendarGraphs({ totals, expenses, viewMonth, cycleStartDay = 7 }) {
   const [year, month] = useMemo(() => {
     const parts = (viewMonth || "").split("-");
     if (parts.length === 2) {
@@ -3305,11 +3352,11 @@ function CalendarGraphs({ totals, expenses, viewMonth }) {
   });
   const maxDaily = Math.max(...dailyData, 1);
 
-  // Category split for viewed budget cycle (from budget start date 7th to next month 6th)
+  // Category split for viewed budget cycle
   const toDateKey = (date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  const cycleStart = new Date(year, month, 7);
-  const cycleEnd = new Date(year, month + 1, 6);
+  const startDay = Math.max(1, Math.min(31, parseInt(cycleStartDay || 7, 10)));
+  const { startDate: cycleStart, endDate: cycleEnd } = getCycleDates(year, month, startDay);
   const cycleStartKey = toDateKey(cycleStart);
   const cycleEndKey = toDateKey(cycleEnd);
 
@@ -3418,7 +3465,7 @@ function CalendarGraphs({ totals, expenses, viewMonth }) {
   );
 }
 
-function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, settleSplit, unsettleSplit }) {
+function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, settleSplit, unsettleSplit, settings }) {
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -3464,23 +3511,22 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
     }, {});
   }, [activeExpenses]);
 
+  const cycleStartDay = Math.max(1, Math.min(31, parseInt(settings?.cycleStartDay || 7, 10)));
   const viewCycle = useMemo(() => {
     const toDateKey = (date) =>
       `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    const start = new Date(year, month, 7);
-    const endExclusive = new Date(year, month + 1, 7);
-    const endDisplay = new Date(year, month + 1, 6);
+    const { startDate, endDate } = getCycleDates(year, month, cycleStartDay);
 
     return {
-      startKey: toDateKey(start),
-      endExclusiveKey: toDateKey(endExclusive),
-      label: `${start.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} - ${endDisplay.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+      startKey: toDateKey(startDate),
+      endKey: toDateKey(endDate),
+      label: `${startDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} - ${endDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
     };
-  }, [year, month]);
+  }, [year, month, cycleStartDay]);
 
   const viewMonthTotal = useMemo(() => {
     return activeExpenses
-      .filter((exp) => exp.date && exp.date >= viewCycle.startKey && exp.date < viewCycle.endExclusiveKey)
+      .filter((exp) => exp.date && exp.date >= viewCycle.startKey && exp.date <= viewCycle.endKey)
       .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   }, [activeExpenses, viewCycle]);
 
@@ -3565,7 +3611,7 @@ function CalendarScreen({ expenses, totals, onAdd, onDelete, onEdit, splits, set
         </div>
       </section>
 
-      <CalendarGraphs totals={totals} expenses={activeExpenses} viewMonth={viewMonth} />
+      <CalendarGraphs totals={totals} expenses={activeExpenses} viewMonth={viewMonth} cycleStartDay={cycleStartDay} />
 
       {selectedDate && createPortal(
         <div className={`modal-backdrop ${closing ? "calendar-closing" : ""}`} onMouseDown={closePopup}>
@@ -4015,7 +4061,7 @@ function InstallPrompt() {
   );
 }
 
-function BudgetResetModal({ allowance, savingsGoal, prevLeftover, onSave, onClose }) {
+function BudgetResetModal({ allowance, savingsGoal, prevLeftover, onSave, onClose, cycleStartDay = 7 }) {
   const [form, setForm] = useState({
     allowance: String(allowance || ""),
     savingsGoal: String(savingsGoal || ""),
@@ -4041,7 +4087,9 @@ function BudgetResetModal({ allowance, savingsGoal, prevLeftover, onSave, onClos
     onSave(allowanceVal, savingsVal, form.rollover);
   };
 
-  const cycleName = new Date(getMonthContext().startDateKey).toLocaleDateString("en-IN", {
+  const startDay = Math.max(1, Math.min(31, parseInt(cycleStartDay || 7, 10)));
+  const daySuffix = startDay === 1 || startDay === 21 || startDay === 31 ? "st" : startDay === 2 || startDay === 22 ? "nd" : startDay === 3 || startDay === 23 ? "rd" : "th";
+  const cycleName = new Date(getMonthContext(new Date(), startDay).startDateKey).toLocaleDateString("en-IN", {
     month: "long",
     year: "numeric"
   });
@@ -4061,7 +4109,7 @@ function BudgetResetModal({ allowance, savingsGoal, prevLeftover, onSave, onClos
           Configure Budget for {cycleName}
         </h2>
         <p className="auth-subtitle" style={{ textAlign: "center", marginBottom: "16px" }}>
-          It's the 7th! A new monthly budget cycle has started. Let's set up your targets.
+          It's the {startDay}{daySuffix}! A new monthly budget cycle has started. Let's set up your targets.
         </p>
 
         <form className="auth-form" onSubmit={submit}>

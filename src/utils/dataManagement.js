@@ -3,7 +3,7 @@
  * Monthly recaps, data cleanup, storage monitoring, and session tracking.
  */
 
-import { getMonthContext } from "./budgetCalculations";
+import { getMonthContext, getCycleDates, extractTxDateKey } from "./budgetCalculations";
 
 const RECAPS_KEY = "cashpilot-monthly-recaps";
 const SESSION_KEY = "cashpilot-session-metadata";
@@ -16,15 +16,15 @@ const SESSION_KEY = "cashpilot-session-metadata";
  * @param {number} budget - Monthly allowance
  * @param {number} savingsGoal - Savings target
  * @param {object} [prevRecap] - Previous month recap for comparison
+ * @param {number} [cycleStartDay=7] - Start day of cycle (1-31)
  * @returns {object} Monthly recap
  */
-export function generateMonthlyRecap(month, year, expenses, budget, savingsGoal, prevRecap = null) {
+export function generateMonthlyRecap(month, year, expenses, budget, savingsGoal, prevRecap = null, cycleStartDay = 7) {
   const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
   const [yearStr, monthStr] = monthKey.split("-");
   const y = parseInt(yearStr, 10);
   const m = parseInt(monthStr, 10) - 1;
-  const startDate = new Date(y, m, 7);
-  const endDate = new Date(y, m + 1, 6);
+  const { startDate, endDate } = getCycleDates(y, m, cycleStartDay);
   const formatDate = (date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   };
@@ -32,7 +32,7 @@ export function generateMonthlyRecap(month, year, expenses, budget, savingsGoal,
   const endKey = formatDate(endDate);
 
   const monthExpenses = expenses.filter(
-    (tx) => tx.type === "expense" && tx.dateKey >= startKey && tx.dateKey <= endKey
+    (tx) => tx.type === "expense" && tx.budgetSource !== "leftover" && !tx.leftoverMonthKey && extractTxDateKey(tx) >= startKey && extractTxDateKey(tx) <= endKey
   );
 
   const totalSpent = monthExpenses.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
