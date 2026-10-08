@@ -3305,15 +3305,21 @@ function CalendarGraphs({ totals, expenses, viewMonth }) {
   });
   const maxDaily = Math.max(...dailyData, 1);
 
-  // Category split for viewed month
-  const viewedMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const viewedMonthExpenses = calendarExpenses.filter(
-    (exp) => exp.date && exp.date.startsWith(viewedMonthPrefix)
+  // Category split for viewed budget cycle (from budget start date 7th to next month 6th)
+  const toDateKey = (date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const cycleStart = new Date(year, month, 7);
+  const cycleEnd = new Date(year, month + 1, 6);
+  const cycleStartKey = toDateKey(cycleStart);
+  const cycleEndKey = toDateKey(cycleEnd);
+
+  const viewedCycleExpenses = calendarExpenses.filter(
+    (exp) => exp.date && exp.date >= cycleStartKey && exp.date <= cycleEndKey
   );
 
   const catData = categories.map((cat) => ({
     ...cat,
-    total: viewedMonthExpenses
+    total: viewedCycleExpenses
       .filter((item) => item.category === cat.name)
       .reduce((sum, item) => sum + Number(item.amount || 0), 0)
   })).filter((c) => c.total > 0);
