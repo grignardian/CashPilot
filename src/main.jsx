@@ -4086,25 +4086,25 @@ function BudgetResetModal({ allowance, savingsGoal, prevLeftover, onSave, onClos
             <div style={{
               display: "flex",
               alignItems: "flex-start",
-              gap: "10px",
-              padding: "12px",
-              background: "var(--accent-light)",
-              borderRadius: "8px",
+              gap: "12px",
+              padding: "14px 16px",
+              background: "rgba(124, 92, 191, 0.12)",
+              borderRadius: "var(--radius-sm)",
               marginTop: "8px",
               marginBottom: "12px",
-              border: "1px solid var(--accent)"
+              border: "1px solid rgba(124, 92, 191, 0.35)"
             }}>
               <input
                 type="checkbox"
                 id="rollover"
                 checked={form.rollover}
                 onChange={(e) => setForm({ ...form, rollover: e.target.checked })}
-                style={{ marginTop: "4px", width: "auto", cursor: "pointer" }}
+                style={{ marginTop: "3px", width: "16px", height: "16px", accentColor: "var(--accent)", cursor: "pointer", flexShrink: 0 }}
               />
-              <label htmlFor="rollover" style={{ fontSize: "13px", color: "var(--text)", margin: 0, cursor: "pointer", fontWeight: "normal" }}>
-                <strong>Roll over leftover balance</strong>
-                <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
-                  Add ₹{Math.round(prevLeftover)} from last month to this month's budget (Making total: ₹{Math.round((Number(form.allowance) || allowance) + (form.rollover ? prevLeftover : 0)).toLocaleString("en-IN")})
+              <label htmlFor="rollover" style={{ fontSize: "13px", color: "var(--text)", margin: 0, cursor: "pointer", fontWeight: "normal", lineHeight: 1.4 }}>
+                <strong style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "var(--text)" }}>Roll over leftover balance</strong>
+                <span style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginTop: "3px" }}>
+                  Add ₹{Math.round(prevLeftover).toLocaleString("en-IN")} from last month to this month's budget (Making total: ₹{Math.round((Number(form.allowance) || allowance) + (form.rollover ? prevLeftover : 0)).toLocaleString("en-IN")})
                 </span>
               </label>
             </div>
